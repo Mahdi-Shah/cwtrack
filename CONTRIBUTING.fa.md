@@ -30,7 +30,7 @@ cwtrack gaps           # چند تکلیف پیدا شد؟ آیا منطقی ا�
 ## راه‌اندازی
 
 ```powershell
-git clone https://github.com/OWNER/cwtrack
+git clone https://github.com/Mahdi-Shah/cwtrack
 cd cwtrack
 pip install -e ".[dev]"
 ```

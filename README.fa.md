@@ -42,7 +42,7 @@ Get-Content gaps.txt -Encoding UTF8
 ## نصب
 
 ```powershell
-git clone https://github.com/OWNER/cwtrack
+git clone https://github.com/Mahdi-Shah/cwtrack
 cd cwtrack
 pip install -e .
 ```

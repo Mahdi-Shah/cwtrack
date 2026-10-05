@@ -42,8 +42,8 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/OWNER/cwtrack"
-Issues = "https://github.com/OWNER/cwtrack/issues"
+Homepage = "https://github.com/Mahdi-Shah/cwtrack"
+Issues = "https://github.com/Mahdi-Shah/cwtrack/issues"
 
 [project.scripts]
 # The wrapper, not cli:main. pip's console-script shim calls the target directly

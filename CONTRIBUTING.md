@@ -10,7 +10,7 @@ with real markup attached is the most useful thing you can send.
 ## Setup
 
 ```powershell
-git clone https://github.com/OWNER/cwtrack
+git clone https://github.com/Mahdi-Shah/cwtrack
 cd cwtrack
 pip install -e ".[dev]"
 ```
