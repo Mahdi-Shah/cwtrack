@@ -1,0 +1,43 @@
+name: a course that does not work
+
+description: A course's page shape is not handled yet
+
+labels: [good first issue, parsing]
+
+body: |
+  Which course is not showing its assignments?
+
+  All course ids are identical in shape; the useful part is the *page structure*:
+
+  - `cwtrack raw` lists what was saved.
+  - For a course with no rows, `.cw/dump/c<N>_assign.html` is where the answer is.
+
+  **Please strip identifying information before pasting anything.** The course title
+  carries its number, and the logout link in the capture contains a live `sesskey`.
+  Replace the title and remove the logout link; the table itself is what matters.
+
+  ```html
+  <!-- the assignment table from your dump, with the course title removed -->
+  ```
+
+  ## What is different about it?
+
+  - [ ] A different theme (the selector assumptions in `src/cwtrack/parse.py` are
+        written against `mb2nl`)
+  - [ ] Different column headers or a different column order
+  - [ ] The table is not there at all
+  - [ ] It works on a phone only / renders via JavaScript
+  - [ ] Something else
+
+  ## Test fixture
+
+  If you can, please add a sanitised capture as
+  `tests/fixtures/course_00000_assign.html` with a test in `tests/test_parse.py`.
+  A fixture that keeps the real shape and carries no identifiers is worth more than
+  a prose description — see `tests/fixtures/course_90000_assign.html` for the
+  pattern.
+
+  ## Note on privacy
+
+  Every course id identifies which courses someone is enrolled in. That is why the
+  fixtures use `00000`-style placeholders rather than real numbers.

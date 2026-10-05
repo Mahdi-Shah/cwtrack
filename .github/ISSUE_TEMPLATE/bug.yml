@@ -1,0 +1,52 @@
+name: bug
+
+description: The parser read something wrong, or a deadline looks incorrect
+
+labels: [bug, parsing]
+
+body: |
+  ## What happened
+
+  <!-- The command you ran, and what it printed or claimed. -->
+
+  ```
+
+  ```
+
+  ## What you expected instead
+
+  ```
+  ```
+
+  ## Your environment
+
+  - cwtrack version: <!-- `python -m cwtrack --help` does not print one; say "0.1.0" or your commit -->
+  - Python:
+  - Windows / macOS / Linux:
+  - `jdatetime` installed? <!-- yes / no - it changes the Jalali conversion path -->
+
+  ## Markup, if a page was misread
+
+  **Strip identifying information first.** Do not paste a whole capture: the logout
+  link contains a live `sesskey`, which is a bearer token for your session. The
+  course name, student number and email all go too.
+
+  One row of the assignment table is enough to diagnose a status or column problem:
+
+  ```html
+  <!-- the <tr> from .cw/dump/cNNN_assign.html -->
+  ```
+
+  If you are not sure what to strip, ask before attaching anything.
+
+  ## What you already checked
+
+  - `cwtrack gaps` output
+  - `cwtrack raw` — was the page saved at all?
+  - whether stderr mentioned a course that failed to list
+
+  ## Notes
+
+  Please do not report "it did not find my assignments" as a bug without the `gaps`
+  output. "The pages showed none at the time of the check" and "there are none" are
+  different claims, and the tool deliberately does not make the second one.

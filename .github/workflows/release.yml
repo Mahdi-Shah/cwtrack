@@ -1,0 +1,96 @@
+name: release
+# Quoted, same reason as ci.yml: bare `on` is the boolean True in YAML 1.1.
+"on":
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: build and attach to the release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write   # to create the release and upload assets
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Sanity check before publishing
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pytest -q
+          ruff check src tests
+
+      - name: Build both distributions
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      # The dashboard inlines these from inside the package. A wheel built without
+      # them still installs and still runs; it just renders the whole page in
+      # Tahoma with no error anywhere. So check rather than assume.
+      - name: Verify the wheel carries the fonts
+        run: |
+          python - <<'PY'
+          import glob, zipfile
+          wheels = glob.glob("dist/*.whl")
+          assert wheels, "no wheel produced"
+          names = zipfile.ZipFile(wheels[0]).namelist()
+          fonts = [n for n in names if n.endswith(".ttf")]
+          assert len(fonts) >= 2, "fonts missing from the wheel: {}".format(names)
+          print("packaged fonts:", *fonts, sep="\n  ")
+          PY
+
+      - name: Check the sdist carries them too
+        run: |
+          python - <<'PY'
+          import glob, tarfile
+          sdists = glob.glob("dist/*.tar.gz")
+          assert sdists, "no sdist produced"
+          names = tarfile.open(sdists[0]).getnames()
+          fonts = [n for n in names if n.endswith(".ttf")]
+          assert fonts, "fonts missing from the sdist: {}".format(names[:20])
+          print("sdist fonts:", *fonts, sep="\n  ")
+          PY
+
+      - name: Install the wheel into a clean environment and run it
+        run: |
+          python -m venv /tmp/verify
+          /tmp/verify/bin/python -m pip install --upgrade pip
+          /tmp/verify/bin/pip install dist/*.whl
+          # --help must not need a network, an account or a data directory.
+          /tmp/verify/bin/cwtrack --help > /dev/null
+          # And the no-data path must be a readable message, not a traceback.
+          /tmp/verify/bin/cwtrack gaps 2>&1 | tee /tmp/err | grep -q 'خطا' || {
+            echo "expected a readable error for a missing store, got:"; cat /tmp/err; exit 1; }
+          # Exit code 2 means "no data found", distinct from a crash.
+          test "$(/tmp/verify/bin/cwtrack gaps >/dev/null 2>&1; echo $?)" = "2"
+          echo "installed wheel behaves correctly"
+
+      - name: Create the release
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+
+      # Tags are how a release is triggered here, so a tag with no matching
+      # commit, or a tag that does not parse, is worth catching rather than
+      # discovering later.
+      - name: What got published
+        run: |
+          echo "release: ${{ steps.release.outputs.html_url }}"
+          echo "tag:     ${{ github.ref_name }}"
+          git log -1 --format='commit: %H %s'

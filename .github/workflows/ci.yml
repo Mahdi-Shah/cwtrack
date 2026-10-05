@@ -1,6 +1,9 @@
 name: CI
 
-on:
+# Quoted deliberately: bare `on` is read as the boolean True by YAML 1.1, which is
+# what pyyaml and most tooling use. GitHub accepts either, but an unquoted key
+# makes the file confusing to read and to check with a script.
+"on":
   push:
     branches: [main]
   pull_request:
