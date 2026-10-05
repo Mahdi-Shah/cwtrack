@@ -216,4 +216,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY
 
 ## License
 
-MIT. Bundled fonts are SIL OFL 1.1 — see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+MIT — see [LICENSE](LICENSE). The bundled fonts are **not** under those terms; they
+are SIL OFL 1.1, and what that requires is spelled out in
+[THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+LICENSE is kept as pure MIT text and nothing else. GitHub's license detector reads it
+literally, and an appended note about the fonts made it report `NOASSERTION` — a public
+repository with no licence badge reads as "no licence granted", which is the opposite
+of the intent.

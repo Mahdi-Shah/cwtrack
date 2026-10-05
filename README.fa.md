@@ -212,4 +212,9 @@ src/cwtrack/
 
 ## لایسنس
 
-MIT. فونت‌های همراه SIL OFL 1.1 — [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+MIT — [LICENSE](LICENSE). فونت‌های همراه زیر این شرایط نیستند؛ لایسنسشان SIL OFL 1.1
+است و الزاماتش در [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) توضیح داده شده.
+
+فایل `LICENSE` عمداً فقط متن خالص MIT است. تشخیص‌دهندهٔ لایسنس گیت‌هاب آن را کلمه‌به‌کلمه
+می‌خواند، و یادداشت اضافه دربارهٔ فونت‌ها باعث می‌شد `NOASSERTION` گزارش کند — یعنی
+مخزن عمومی بدون بج لایسنس، که برعکسِ نیت است.
