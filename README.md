@@ -216,4 +216,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY
 
 ## License
 
-MIT. Bundled fonts are SIL OFL 1.1 — see [LICENSE](LICENSE).
+MIT. Bundled fonts are SIL OFL 1.1 — see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

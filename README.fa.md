@@ -212,4 +212,4 @@ src/cwtrack/
 
 ## لایسنس
 
-MIT. فونت‌های همراه SIL OFL 1.1 — [LICENSE](LICENSE).
+MIT. فونت‌های همراه SIL OFL 1.1 — [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).

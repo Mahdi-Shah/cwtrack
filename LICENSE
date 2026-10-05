@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 cwtrack contributors
+Copyright (c) 2026 Mahdi Shahmoradi Ramsheh
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,11 +22,5 @@ SOFTWARE.
 
 ---
 
-This project bundles font files that are licensed separately:
-
-  assets/fonts/Estedad-VF.ttf        SIL Open Font License 1.1
-  assets/fonts/Vazirmatn-*.ttf       SIL Open Font License 1.1
-
-The SIL OFL permits bundling and redistribution, including in commercial use,
-provided the fonts are not sold on their own and the license travels with them.
-Full text: https://openfontlicense.org
+Bundled fonts are licensed separately and are NOT covered by the MIT terms above.
+See THIRD_PARTY_LICENSES.md.
