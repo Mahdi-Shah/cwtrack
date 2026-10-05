@@ -75,6 +75,9 @@ def report(rows: list[dict], local: dict[str, list[str]], now: datetime) -> str:
         and 0 < r["due"] - now_epoch <= 14 * 86400
     ]
     unknown = [r for r in rows if r["bucket"] == "unknown"]
+    # Named states, never `total - open`. That arithmetic counted an unparsed row as
+    # handed in, which is the one thing this tool refuses to do.
+    settled = [r for r in rows if r["bucket"] in ("graded", "submitted")]
 
     out = ["# وضعیت تکالیف", ""]
     out.append("- **زمان گزارش:** {}".format(now.strftime("%Y-%m-%d %H:%M")))
@@ -86,7 +89,8 @@ def report(rows: list[dict], local: dict[str, list[str]], now: datetime) -> str:
         "| کل تکالیف | {} |".format(len(rows)),
         "| ارسال‌نشده | {} |".format(len(open_rows)),
         "| گذشته از مهلت یا بسته‌شده | {} |".format(len(urgent)),
-        "| ارسال‌شده یا نمره‌دار | {} |".format(len(rows) - len(open_rows)),
+        "| ارسال‌شده یا نمره‌دار | {} |".format(len(settled)),
+        "| نامشخص | {} |".format(len(unknown)),
         "",
     ]
 

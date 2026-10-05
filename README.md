@@ -4,15 +4,53 @@ Track your own assignments, deadlines and course material on **cw.sharif.ir** �
 
 Two OpenCode skills and a small Python package. Zero required dependencies, no server, no telemetry.
 
+## Use it by asking
+
+The skills are the interface. You say what you want; the skill calls the API, reads
+the site, and answers. You do not run anything.
+
+> تکالیفم را بررسی کن — کدام چیزی از قلم افتاده؟
+> مهلت‌ها کی است؟
+> یه داشبورد از درسم بساز
+> برای این تکلیف بریف بساز
+> تکلیفمو حل کن
+
+The one thing only a human does is read the login captcha: the skill shows it to you
+enlarged, you say what it says, and it continues. Everything else — fetching,
+parsing Jalali deadlines, deciding what is still owed, writing the brief, handing over
+to the document skill — happens without you touching a command.
+
+## Use it from a terminal
+
+Same code path, for when you want to run it yourself or debug a parse.
+
 ```powershell
 cwtrack fetch     # log in, download, store
 cwtrack ui        # open the dashboard
+cwtrack gaps      # what's outstanding, worst first
 cwtrack brief     # start a working folder for what's due
 ```
 
 [فارسی](README.fa.md) · [MIT](LICENSE)
 
 ---
+
+## The API the skills call
+
+`cwtrack.api` returns Python values. It never prompts, never prints, and never opens a
+browser — each of those three made a skill fail in practice, and each has a test:
+
+```python
+from cwtrack import api
+
+api.refresh()                    # captcha_required / ok / needs_credentials
+api.status()                     # urgent, soon, unknown, per-course counts
+api.outstanding(days=7)          # what to do this week, with cmids
+api.make_brief(cmid=42694)       # the handoff folder
+api.build_dashboard()            # path to the HTML, opened by nobody
+```
+
+The CLI calls exactly these, so the two cannot disagree about what is outstanding.
 
 ## What it does
 
@@ -168,8 +206,8 @@ history.
 
 ```powershell
 pip install -e ".[dev]"
-pytest              # 278 tests, no network, no account needed, no network, no account needed
-ruff check src tests
+pytest              # 317 tests, no network, no account needed
+ruff check src tests tools
 ```
 
 Install from a clean clone before you trust a green run. Most of the bugs found
@@ -180,7 +218,7 @@ dropped, an import-time guard that only fires on a real console.
 Tests run entirely on sanitised fixtures in `tests/fixtures/` — the shape of the real
 page, with every identifier replaced. No test reads a real capture.
 
-The two places bugs actually lived are the two best-tested modules:
+The three places bugs actually lived are the three best-tested modules:
 
 - `dates.py` — properties over ranges, not examples. A single anchor would have
   passed both broken Jalali implementations.
@@ -188,13 +226,17 @@ The two places bugs actually lived are the two best-tested modules:
   drive it: `"not submitted"` contains `"submitted"`, and a draft is not a
   submission. An earlier version got this backwards and reported four undone
   assignments as handed in.
+- `api.py` — the surface the skills call. Three properties each have a test, because
+  each was a real blocker: it never prompts, never prints, and never claims more than
+  the store holds.
 
 ## Layout
 
 ```
 src/cwtrack/
+├── api.py         the surface a skill calls   <- no stdout, no prompts
 ├── client.py      HTTP, cookies, retry
-├── auth.py        login and the captcha
+├── auth.py        login and the captcha handshake
 ├── fetch.py       downloading pages
 ├── dates.py       Jalali/Gregorian, relative deadlines   <- pure, no I/O
 ├── classify.py    submission state -> verdict
@@ -203,7 +245,10 @@ src/cwtrack/
 ├── tracker.py     the on-disk store
 ├── dashboard.py   the HTML
 ├── brief.py       the handoff
+├── paths.py       where the store, dump and work folder are
 └── cli.py         argparse
+
+tools/link_skills.py    points the installed skills at .agents/skills/
 
 .agents/skills/
 ├── sharif-cw/              this tool, as an OpenCode skill

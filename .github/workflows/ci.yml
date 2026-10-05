@@ -46,7 +46,15 @@ jobs:
           pytest -q
 
       - name: Lint
-        run: ruff check src tests
+        run: ruff check src tests tools
+
+      # The skills are the product now, and the copy the agent loads is a file link
+      # to .agents/skills/. A real copy is a fork, and this one already was: the
+      # installed sharif-cw had drifted until it had no `brief` command, which is the
+      # seam between the two skills. `--check` is non-destructive and the test suite
+      # calls the same function, so drift fails here and there.
+      - name: Installed skills point at this checkout
+        run: python tools/link_skills.py --check
 
   build:
     name: build wheel

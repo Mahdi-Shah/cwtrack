@@ -27,7 +27,7 @@ in `tests/fixtures/`. If a test ever needs to reach the network, it is written w
 ```powershell
 pytest                        # everything
 pytest tests/test_dates.py -v # one file
-ruff check src tests          # must be clean
+ruff check src tests tools    # must be clean
 ```
 
 Run the suite both ways before pushing — once as-is, once with `jdatetime`
@@ -57,7 +57,24 @@ If a status was read wrong, one row of the table is enough. Open
 
 **Extending coverage to courses that currently do not work.** If the theme changed
 its table markup, the selectors are in `src/cwtrack/parse.py` and the expectations
-are in `tests/fixtures/`.
+are in `tests/fixtures/`. `cwtrack store` re-parses what is already on disk, so a
+parser fix needs no login and no captcha.
+
+**Changing a skill.** `.agents/skills/` is the source. The copy the agent actually
+loads is a **file link** to it, and `tools/link_skills.py --check` fails the suite
+when they have diverged. This is not theoretical: the installed `sharif-cw` had
+drifted until it no longer had a `brief` command, so a skill-driven session could not
+hand work over. Edit `.agents/skills/`, never the installed copy.
+
+A skill that calls `api.something()` needs that function to exist —
+`tests/test_api.py` checks every call the skills name, and every module and reference
+file they mention. A guard that stops matching is worse than no guard, so there is
+also a test asserting it still matches something.
+
+Keep three properties in `api.py`, because each is a real blocker rather than a
+preference, and each has a test: it never prompts, never prints, and never claims more
+than the store holds. A skill has no terminal, Persian does not survive a stock
+Windows console, and "no assignments" and "no data" are opposite claims.
 
 ## Rules
 

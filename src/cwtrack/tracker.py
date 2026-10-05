@@ -232,15 +232,25 @@ def gaps(assignments: list[Assignment], now_epoch: int) -> dict:
             slot["soonest"] = (a.due, a.name)
         slot["items"].append(a)
 
+    unknown = [a for a in assignments if a.bucket == "unknown"]
+    # Named states, not the complement. `total - open` counted an `unknown` row as
+    # finished, because `unknown` is deliberately not in OPEN - so the one bucket
+    # this tool refuses to interpret was the one reported as handed in. That is the
+    # failure the whole module exists to prevent, and it was in the headline number
+    # rather than in a detail. `done` here and `done` in per_course must agree.
+    done = [a for a in assignments if a.bucket in ("graded", "submitted")]
+
     return {
         "urgent": urgent,
         "soon": soon,
         "unscheduled": unscheduled,
+        "unknown": unknown,
         "per_course": sorted(per_course.values(), key=lambda c: (-c["overdue"], -c["open"], c["course"])),
         "counts": {
             "total": len(assignments),
             "open": len(open_items),
             "urgent": len(urgent),
-            "done": len(assignments) - len(open_items),
+            "done": len(done),
+            "unknown": len(unknown),
         },
     }

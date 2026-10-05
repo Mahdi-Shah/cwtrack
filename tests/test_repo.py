@@ -262,6 +262,24 @@ class TestDocsAgreeWithTheCode:
             assert "cw.py" not in text, "a command was renamed but a doc still says cw.py"
             assert "cwtrack" in text
 
+    #: The skill mentions commands two ways: a fenced line, or inline in backticks.
+    #: Matching either, while requiring the backtick or line start, is what keeps
+    #: `python -c "from cwtrack import api"` from being read as a subcommand named
+    #: "import" - the failure this guard hit the moment the skill gained an
+    #: API-first section. A looser regex would have kept passing while checking the
+    #: wrong thing, which is worse than not checking.
+    COMMAND = re.compile(r"(?:`cwtrack ([a-z]+)|^cwtrack ([a-z]+))", re.M)
+
+    @classmethod
+    def _commands_in_the_skill(cls) -> set:
+        skill = (ROOT / ".agents" / "skills" / "sharif-cw" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        found = set()
+        for line_start, inline in cls.COMMAND.findall(skill):
+            found.add(line_start or inline)
+        return found
+
     def test_every_command_in_the_skill_is_a_real_subcommand(self):
         import importlib
 
@@ -269,14 +287,22 @@ class TestDocsAgreeWithTheCode:
         choices = set()
         for action in parser._actions:
             choices.update(getattr(action, "choices", []) or [])
-        skill = (ROOT / ".agents" / "skills" / "sharif-cw" / "SKILL.md").read_text(
-            encoding="utf-8"
-        )
-        import re
 
-        for mentioned in set(re.findall(r"cwtrack ([a-z]+)", skill)):
+        for mentioned in self._commands_in_the_skill():
             assert mentioned in choices, (
                 "SKILL.md mentions `cwtrack {}` but argparse has no such command".format(
                     mentioned
                 )
             )
+
+    def test_the_command_guard_is_not_vacuous(self):
+        """A guard that matches nothing reads as protection and protects nothing.
+
+        The `from cwtrack import api` example in the skill is here to keep this
+        honest: it contains the words but is not a command, so it must not be counted
+        as one - and the guard must still find the commands around it.
+        """
+        found = self._commands_in_the_skill()
+        assert found, "no `cwtrack <command>` mentions found; the guard matches nothing"
+        assert "import" not in found
+        assert {"fetch", "gaps"} <= found

@@ -6,6 +6,62 @@ All notable changes to this project. Format follows
 
 ## [Unreleased]
 
+### The skills are now the interface
+
+The project was already two skills and a CLI, but the skill OpenCode actually loaded
+was a stale copy that had drifted until it no longer had a `brief` command — the seam
+between the two skills. A skill-driven session therefore had no way to hand work over,
+and `brief` was never mentioned to the user. Three changes close that:
+
+- **`cwtrack.api`** — a surface a skill calls. It returns Python values and never
+  prints, prompts, or opens a browser; each of those three made a skill fail in
+  practice, and each now has a test. `status`, `outstanding`, `gaps_text`,
+  `open_text`, `report_text`, `build_dashboard`, `materials_text`, `make_brief`,
+  `ingest`, `refresh`, `paths`.
+- **The CLI calls the same API**, so the command line and the skills cannot disagree
+  about what is outstanding. It keeps the three things the API refuses: prompting,
+  opening the dashboard, and `-o` for a console that cannot show Persian.
+- **`tools/link_skills.py`** points the installed skills at `.agents/skills/` with a
+  file link, and `--check` fails the suite when they have diverged. An installed copy
+  is a fork, and this one already was.
+
+### The captcha handshake
+
+`auth.do_login` called `input()`, so from a shell with no terminal a fetch could not
+complete at all — it raised EOFError and suggested setting an environment variable.
+Login is now two calls: `auth.submit()` returns `captcha_required` with the image, and
+the caller hands back the answer. The CLI prompts; a skill shows the image.
+
+`api.refresh()` also writes `captcha-zoom.html`, the same image at 4×. The site's is
+about 190×40 px, which is hard enough to read that a miss costs a whole round trip.
+
+### Correctness
+
+- **`counts.done` counted an unrecognised status as finished.** It was
+  `total - open`, and `unknown` is deliberately not an open bucket, so the one state
+  the tool refuses to interpret was reported as handed in — the exact failure the
+  `unknown` bucket exists to prevent, sitting in the headline number rather than in a
+  detail. `done` is now the named states, `unknown` is counted separately, and the
+  total agrees with the per-course figures, which already used the correct definition.
+  Found by a test written for the API, checking the documented rule against the code.
+- `auth.submit()` reports a rejected captcha with a freshly downloaded image, because
+  Moodle invalidates the previous one; re-showing the spent image cannot succeed.
+- Credentials are checked before the HTTP client is built, so a call without them
+  cannot open a socket.
+
+### Testing
+
+- `tests/test_api.py` — 36 tests for the skill-facing surface: it never prompts (checked
+  by patching `input`, and statically by parsing the module so the docstring explaining
+  the rule does not read as a violation), never prints, never opens a browser, and
+  never reports more than the store holds.
+- A guard that a skill is not installed as a copy, and that every `api.*` call and
+  every module the skill names actually exists.
+- The "every command in the skill is real" guard now matches whole command lines. It
+  read `from cwtrack import api` as a subcommand named `import`, and there is now a
+  second test asserting it still matches the commands around it, so a rewrite cannot
+  quietly turn it into a no-op.
+
 ## [0.1.0] — 2026-10-05
 
 First public release.

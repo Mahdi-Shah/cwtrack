@@ -62,11 +62,34 @@ class TestTrackerStore:
         user, items = tracker.load(store)
         gap = tracker.gaps(items, now_epoch)
         assert gap["counts"]["total"] == 6
-        assert set(gap["counts"]) == {"total", "open", "urgent", "done"}
+        # `unknown` is a reported count of its own, not a term that folds into `done`.
+        assert set(gap["counts"]) == {"total", "open", "urgent", "done", "unknown"}
         # urgent and soon must not overlap
         urgent = {a.name for a in gap["urgent"]}
         soon = {a.name for a in gap["soon"]}
         assert not (urgent & soon)
+
+    def test_done_never_counts_an_unrecognised_status(self, store, now_epoch):
+        """The headline number must not read a parse failure as handed in.
+
+        This is the whole reason `unknown` exists, and it was in the count rather
+        than in a detail: `done` was `total - open`, and `unknown` is not an open
+        bucket, so every row this tool refused to interpret was reported as finished.
+        """
+        user, items = tracker.load(store)
+        items[0].bucket = "unknown"
+        gap = tracker.gaps(items, now_epoch)
+        assert gap["counts"]["unknown"] == 1
+        assert gap["counts"]["done"] == sum(
+            1 for a in items if a.bucket in ("graded", "submitted")
+        )
+
+    def test_done_agrees_with_the_per_course_totals(self, store, now_epoch):
+        """Two definitions of done in one function is how they drift apart."""
+        user, items = tracker.load(store)
+        items[0].bucket = "unknown"
+        gap = tracker.gaps(items, now_epoch)
+        assert sum(c["done"] for c in gap["per_course"]) == gap["counts"]["done"]
 
     def test_open_buckets_are_exactly_the_incomplete_ones(self, store, now_epoch):
         user, items = tracker.load(store)

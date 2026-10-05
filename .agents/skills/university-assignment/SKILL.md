@@ -40,16 +40,21 @@ Then read it for the constraints, because these decide the deliverable and they 
 
 ### 2. Brief
 
-**If the `sharif-cw` skill already ran, the brief exists.** `cwtrack brief --cmid <id>`
-creates a working folder with `brief.md` pre-filled with everything the site knows —
-title, course, term, deadline, countdown, status, link — plus `source/` for material,
-`draft.md` for the answer and `HANDOFF.md` with the next steps.
+**If the `sharif-cw` skill already ran, the brief exists.** It writes a working
+folder with `brief.md` pre-filled with everything the site knows — title, course,
+term, deadline, countdown, status, link — plus `source/` for material, `draft.md` for
+the answer and `HANDOFF.md` with the next steps. `sharif-cw` calls
+`api.make_brief(cmid=<id>)` to create it.
 
 Work in that folder. Its `brief.md` section ۲ (the assignment text) is deliberately
 empty, because the site does not expose it. Fill it in — from the assignment page or
 the lecturer's material — and treat everything else in the file as already-verified.
 Do not re-derive the deadline, and do not trust it blindly either: if the brief's
 deadline disagrees with the page, say so.
+
+**Do not solve a brief whose section ۲ is still empty.** Ask for the assignment text
+first. A confident answer to the wrong question is the expensive failure here, and in
+the output it looks exactly like success.
 
 Otherwise, copy `assets/brief-template.md` next to the work, fill it in, and keep it.
 Either way it holds the assignment text, the extracted constraints, the open

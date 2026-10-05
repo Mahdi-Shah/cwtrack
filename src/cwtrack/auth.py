@@ -1,8 +1,14 @@
 """Login, and the captcha.
 
 cw.sharif.ir puts an image captcha (local_logincaptcha) on the login form. The
-image is saved and a human is asked to read it. It is not solved automatically -
-see SKILL.md for why. Everything here is read-only against the site.
+image is saved and a human is asked to read it. It is not solved automatically - see
+SKILL.md for why. Everything here is read-only against the site.
+
+The login is a two-phase protocol because the reader may not be a person at a
+terminal. `submit()` returns a state and never blocks on stdin; the CLI turns a
+`captcha_required` into a prompt, and a skill turns it into an image it shows the
+user. Same code path, two callers, and neither can accidentally make the other wait
+on a keyboard.
 """
 
 from __future__ import annotations
@@ -14,12 +20,20 @@ from pathlib import Path
 
 from .client import DEFAULT_BASE, Client, CwError
 
+# Statuses returned by submit(). Named constants because the caller branches on them
+# and a typo in a string literal is a silent "treat an unknown status as ok".
+OK = "ok"
+CAPTCHA_REQUIRED = "captcha_required"
+CAPTCHA_REJECTED = "captcha_rejected"
+FAILED = "failed"
+
 
 def ask(prompt: str) -> str:
     """Prompt, but turn a closed stdin into a clean error instead of a traceback.
 
-    Without this, running the script from a scheduler or a piped context dies on
-    a bare EOFError, which tells the user nothing about what went wrong.
+    Only the CLI uses this. A skill must never reach it: a prompt with no terminal
+    behind it raises EOFError, and the resulting error tells the user to set an
+    environment variable rather than telling them what actually happened.
     """
     try:
         return input(prompt).strip()
@@ -30,61 +44,171 @@ def ask(prompt: str) -> str:
         ) from exc
 
 
-def do_login(client: Client, user: str, pw: str, base_dir: Path) -> None:
-    page = client.get("/login/index.php")
+def captcha_viewer(image: Path, scale: int = 4) -> Path:
+    """An HTML page that shows the captcha large enough to read.
 
+    The image is about 190x40 px, which is genuinely hard to read, and a rejected
+    read costs the user a whole round trip. A browser scales it for free, so the
+    viewer does that rather than pulling in an imaging dependency: the nearest-
+    neighbour version keeps the strokes crisp, and the smoothed one underneath it is
+    the fallback for anyone who finds the aliasing worse than the blur.
+
+    Written next to the image and referencing it relatively, so it works when opened
+    straight from disk with no server.
+    """
+    viewer = image.with_name(image.stem + "-zoom.html")
+    width = 190 * scale
+    height = 40 * scale
+    page = """<!doctype html>
+<html lang="fa"><head><meta charset="utf-8">
+<title>captcha</title>
+<style>
+  body{{background:#fff;color:#111;font:14px/1.6 system-ui,sans-serif;
+        margin:0;padding:24px;display:flex;gap:32px;align-items:flex-start}}
+  figure{{margin:0}}
+  img{{display:block;border:1px solid #ccc;background:#fff}}
+  .crisp{{width:{w}px;height:{h}px;image-rendering:pixelated}}
+  .smooth{{width:{w}px;height:{h}px}}
+  figcaption{{margin-top:6px;color:#555}}
+</style></head>
+<body>
+  <figure>
+    <img class="crisp" src="{src}" alt="captcha">
+    <figcaption>larger, crisp</figcaption>
+  </figure>
+  <figure>
+    <img class="smooth" src="{src}" alt="captcha">
+    <figcaption>larger, smoothed</figcaption>
+  </figure>
+</body></html>
+""".format(w=width, h=height, src=image.name)
+    viewer.write_text(page, encoding="utf-8")
+    return viewer
+
+
+def _login_form(client: Client) -> tuple[str, bool]:
+    """(logintoken, captcha_present) from a freshly loaded login form.
+
+    local_logincaptcha injects its image field with JS, so the served HTML has the
+    script but not the input. Detect the script, not the input.
+    """
+    page = client.get("/login/index.php")
     found = re.findall(r'name="logintoken"\s+value="([^"]+)"', page)
     if not found:
         raise CwError(
             "no logintoken on the login form - the site changed its login markup. "
             "Run with --debug-page to dump what it returned."
         )
+    return found[0], ("local_logincaptcha" in page or "logincaptcha" in page)
+
+
+def _fetch_captcha(client: Client, base_dir: Path) -> dict:
+    shot = base_dir / "captcha.png"
+    shot.parent.mkdir(parents=True, exist_ok=True)
+    shot.write_bytes(
+        client.get_bytes("/local/logincaptcha/image.php?v={}".format(int(time.time() * 1000)))
+    )
+    return {"image": shot, "viewer": captcha_viewer(shot)}
+
+
+def submit(
+    client: Client,
+    user: str,
+    pw: str,
+    base_dir: Path,
+    captcha: str | None = None,
+) -> dict:
+    """Attempt a login. Returns a state; never prompts, never raises on rejection.
+
+    States are the four module constants. `captcha_required` and `captcha_rejected`
+    both carry a freshly downloaded image, so a caller that loops gets a new puzzle
+    each time instead of re-showing a spent one - Moodle invalidates the previous
+    captcha on use.
+    """
+    token, has_captcha = _login_form(client)
+
+    if has_captcha and not captcha:
+        challenge = _fetch_captcha(client, base_dir)
+        return {
+            "status": CAPTCHA_REQUIRED,
+            "image": challenge["image"],
+            "viewer": challenge["viewer"],
+            "message": "این سایت روی ورود کپچا تصویری دارد. تصویر را به کاربر نشان بده.",
+        }
 
     payload = {
         "username": user,
         "password": pw,
-        "logintoken": found[0],
+        "logintoken": token,
         "anchor": "",
     }
-
-    # local_logincaptcha injects its image field with JS, so the served HTML has
-    # the script but not the input. Detect the script, not the input.
-    has_captcha = "local_logincaptcha" in page or "logincaptcha" in page
     if has_captcha:
-        shot = base_dir / "captcha.png"
-        shot.parent.mkdir(parents=True, exist_ok=True)
-        shot.write_bytes(
-            client.get_bytes("/local/logincaptcha/image.php?v={}".format(int(time.time() * 1000)))
-        )
-        print("این سایت روی ورود کپچا تصویری دارد.")
-        print("تصویر اینجا ذخیره شد، بازش کن: {}".format(shot.resolve()))
-        answer = ask("حروف/اعداد داخل تصویر را بنویس: ")
-        if not answer:
-            raise CwError("پاسخ کپچا خالی بود، لغو شد.")
-        payload["logincaptcha"] = answer
+        payload["logincaptcha"] = captcha
 
     result = client.post("/login/index.php", payload)
 
     if client.logged_in():
-        print("ورود موفق بود.")
         save_marker(base_dir, user)
-        return
+        return {"status": OK}
 
     low = result.lower()
+    if has_captcha and "captchaincorrect" in low:
+        challenge = _fetch_captcha(client, base_dir)
+        return {
+            "status": CAPTCHA_REJECTED,
+            "image": challenge["image"],
+            "viewer": challenge["viewer"],
+            "message": "پاسخ کپچا رد شد - دوباره تلاش کن.",
+        }
+
     hints = [
-        ("captchaincorrect", "پاسخ کپچا رد شد - صفحه را دوباره باز کن و با دقت بیشتری بخوان"),
         ("invalidlogin", "نام کاربری یا رمز اشتباه است"),
         ("invalid login", "نام کاربری یا رمز اشتباه است"),
         ("loginerror", "ورود ناموفق بود"),
-        ("لطفا", "پیام خطای سایت: بررسی کنید رمز را از طریق «فراموشی رمز» بازنشانی کرده‌اید"),
     ]
-    for needle, msg in hints:
+    for needle, message in hints:
         if needle in low:
-            raise CwError(msg)
-    raise CwError(
-        "ورود ناموفق بود ولی پیام مشخصی نداد. توجه: صفحهٔ ورود cw.sharif.ir "
-        "فعلاً از همهٔ کاربران می‌خواهد رمز را از طریق «فراموشی رمز» بازنشانی کنند."
-    )
+            return {"status": FAILED, "message": message}
+
+    return {
+        "status": FAILED,
+        "message": (
+            "ورود ناموفق بود ولی پیام مشخصی نداد. توجه: صفحهٔ ورود cw.sharif.ir "
+            "فعلاً از همهٔ کاربران می‌خواهد رمز را از طریق «فراموشی رمز» بازنشانی کنند."
+        ),
+    }
+
+
+def do_login(client: Client, user: str, pw: str, base_dir: Path) -> None:
+    """The CLI's login: prompt for the captcha, then get in or explain why not.
+
+    A thin wrapper over submit(), so the human path and the skill path cannot drift
+    into two different notions of what a successful login is.
+    """
+    state = submit(client, user, pw, base_dir)
+
+    while state["status"] == CAPTCHA_REQUIRED:
+        shot = state["image"]
+        print(state["message"])
+        print("تصویر اینجا ذخیره شد، بازش کن: {}".format(shot.resolve()))
+        print("یا این صفحه را باز کن (بزرگ‌شده): {}".format(state["viewer"].resolve()))
+        answer = ask("حروف/اعداد داخل تصویر را بنویس: ")
+        if not answer:
+            raise CwError("پاسخ کپچا خالی بود، لغو شد.")
+        state = submit(client, user, pw, base_dir, captcha=answer)
+
+    if state["status"] == OK:
+        print("ورود موفق بود.")
+        return
+
+    if state["status"] == CAPTCHA_REJECTED:
+        # submit() already downloaded a fresh image, so point at it rather than
+        # telling the user to start the whole command again.
+        print(state["message"])
+        print("تصویر جدید: {}".format(state["image"].resolve()))
+        raise CwError("پاسخ کپچا رد شد.")
+
+    raise CwError(state.get("message") or "ورود ناموفق بود.")
 
 
 def save_marker(base_dir: Path, user: str) -> None:
