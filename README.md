@@ -168,9 +168,14 @@ history.
 
 ```powershell
 pip install -e ".[dev]"
-pytest              # 277 tests, no network, no account needed
+pytest              # 278 tests, no network, no account needed
 ruff check src tests
 ```
+
+Install from a clean clone before you trust a green run. Most of the bugs found
+while building this were invisible to the working tree and only appeared once the
+package was installed somewhere else — a missing dev dependency, an asset the wheel
+dropped, an import-time guard that only fires on a real console.
 
 Tests run entirely on sanitised fixtures in `tests/fixtures/` — the shape of the real
 page, with every identifier replaced. No test reads a real capture.
