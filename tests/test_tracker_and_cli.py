@@ -228,11 +228,70 @@ class TestStreams:
             monkeypatch.setattr(sys, "stdout", real)
 
 
-class TestCli:
-    """main() raises CwError; turning that into an exit code is __main__'s job.
+class TestEntryPoint:
+    """`cwtrack` and `python -m cwtrack` must behave identically.
 
-    Error cases here therefore assert the exception, not a return code. Asserting
-    the return code would be testing the four-line wrapper instead.
+    pip's console-script shim calls the target function directly and never goes
+    through __main__.py. So the two entry points are genuinely different code
+    paths, and the one that matters - the command a student types - is the one
+    nothing in the working tree exercises.
+    """
+
+    def test_cwerror_becomes_a_message_not_a_traceback(self, tmp_path, capsys):
+        from cwtrack.__main__ import main
+
+        code = main(["gaps", "--data", str(tmp_path / "absent")])
+        captured = capsys.readouterr()
+        assert code == 2
+        assert "Traceback" not in captured.err
+        assert "خطا:" in captured.err
+        # The message must name the fix, not just the failure.
+        assert "fetch" in captured.err
+
+    def test_no_data_has_its_own_exit_code(self, tmp_path, capsys):
+        """Distinct from 1, so a script can tell 'no data' from 'failed'."""
+        from cwtrack.__main__ import main
+
+        assert main(["gaps", "--data", str(tmp_path / "absent")]) == 2
+
+    def test_success_returns_zero(self, store, capsys):
+        from cwtrack.__main__ import main
+
+        assert main(["gaps", "--data", str(store)]) == 0
+
+    def test_keyboard_interrupt_is_not_a_crash(self, store, monkeypatch, capsys):
+        from cwtrack import __main__ as entry
+
+        def boom(argv=None):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr(entry, "_main", boom)
+        assert entry.main(["gaps", "--data", str(store)]) == 130
+        assert "لغو شد" in capsys.readouterr().err
+
+    def test_module_and_console_script_share_the_wrapper(self):
+        """The packaging must not point the console script at the wrong function."""
+        import pathlib
+
+        import tomllib
+
+        pyproject = pathlib.Path(__file__).resolve().parent.parent / "pyproject.toml"
+        scripts = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["scripts"]
+        assert scripts["cwtrack"] == "cwtrack.__main__:main", (
+            "point it at cli:main and the installed command prints a traceback"
+        )
+
+    def test_the_wrapper_target_actually_exists(self):
+        import importlib
+
+        entry = importlib.import_module("cwtrack.__main__")
+        assert callable(entry.main)
+
+
+class TestCli:
+    """cli.main raises CwError; the wrapper in __main__ turns that into a message
+    and an exit code. These tests exercise the raw function, so error cases assert
+    the exception rather than a return code - see TestEntryPoint for the codes.
     """
 
     def _run(self, argv):

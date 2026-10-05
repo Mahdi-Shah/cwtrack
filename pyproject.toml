@@ -43,7 +43,11 @@ Homepage = "https://github.com/OWNER/cwtrack"
 Issues = "https://github.com/OWNER/cwtrack/issues"
 
 [project.scripts]
-cwtrack = "cwtrack.cli:main"
+# The wrapper, not cli:main. pip's console-script shim calls the target directly
+# and never goes through __main__.py, so pointing this at cli:main would leave the
+# installed command printing a traceback where `python -m cwtrack` prints a
+# sentence. Both paths must behave the same.
+cwtrack = "cwtrack.__main__:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
