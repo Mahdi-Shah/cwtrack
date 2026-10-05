@@ -36,6 +36,9 @@ calendar = ["jdatetime>=2.2"]
 dev = [
     "pytest>=7.4",
     "ruff>=0.4",
+    # Only for tests/test_repo.py, which reads the workflow YAML to check it.
+    # Kept in dev rather than the main list: nothing the tool runs needs it.
+    "pyyaml>=6.0",
 ]
 
 [project.urls]

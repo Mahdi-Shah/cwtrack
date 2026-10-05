@@ -168,7 +168,7 @@ history.
 
 ```powershell
 pip install -e ".[dev]"
-pytest              # 278 tests, no network, no account needed
+pytest              # 277 tests, no network, no account needed
 ruff check src tests
 ```
 

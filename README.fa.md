@@ -162,7 +162,7 @@ cw.sharif.ir روی فرم ورود یک کپچای تصویری می‌گذار
 
 ```powershell
 pip install -e ".[dev]"
-pytest              # ۲۷۸ تست، بدون شبکه، بدون حساب
+pytest              # ۲۷۷ تست، بدون شبکه، بدون حساب
 ruff check src tests
 ```
 
