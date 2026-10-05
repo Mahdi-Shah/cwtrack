@@ -1,0 +1,71 @@
+# ---------------------------------------------------------------------------
+# THIS REPO IS CODE ONLY. Your coursework data stays on your machine.
+#
+# Everything below is per-student and must never be committed:
+#   - names, student numbers, email addresses
+#   - course ids and enrolment, which identifies which courses you take
+#   - raw authenticated HTML, which contains a live sesskey in the logout URL
+#
+# If you ever paste a dump into a bug report, strip it first.
+# ---------------------------------------------------------------------------
+
+# tracker store: assignments, marks, identity, per-course folders
+cw-data/
+cw-data-*/
+
+# raw page captures from the authenticated session
+.cw/
+
+# generated output
+reports/*.md
+*.pdf
+*.html
+!docs/**/*.html
+
+# working folders created by `cwtrack brief`
+work/
+briefs/
+
+# ---------------------------------------------------------------------------
+# secrets — belt and braces. Nothing above should get this far.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+*.env
+secrets.json
+token.txt
+*.token
+captcha.png
+captcha_answer.txt
+cookies.json
+session.json
+
+# ---------------------------------------------------------------------------
+# python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ---------------------------------------------------------------------------
+# editors / os
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# node, if you ever add a frontend
+node_modules/
