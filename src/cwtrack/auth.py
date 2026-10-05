@@ -27,6 +27,11 @@ CAPTCHA_REQUIRED = "captcha_required"
 CAPTCHA_REJECTED = "captcha_rejected"
 FAILED = "failed"
 
+#: How many times a human may read a captcha before we stop. Three is generous for a
+#: 190x40 image and a zoomed viewer; past that, the person is squinting, not solving,
+#: and an unbounded loop against a login endpoint helps nobody.
+MAX_HUMAN_ATTEMPTS = 3
+
 
 def ask(prompt: str) -> str:
     """Prompt, but turn a closed stdin into a clean error instead of a traceback.
@@ -179,6 +184,23 @@ def submit(
     }
 
 
+def _try_ocr(image: Path) -> dict | None:
+    """A confident reading, or None to ask the human.
+
+    Returns None for every reason that is not "the readings agreed" — OCR disabled, no
+    tesseract, an image that is not captcha-shaped, or too much disagreement. Keeping
+    the reasons collapsed to a single None is deliberate: this is a convenience, and a
+    convenience that can explain itself while prompting is a second thing to read.
+    """
+    from . import captcha
+
+    try:
+        result = captcha.guess(image)
+    except Exception:  # noqa: BLE001 - never let a nicety break the login
+        return None
+    return result if result.get("ok") else None
+
+
 def do_login(client: Client, user: str, pw: str, base_dir: Path) -> None:
     """The CLI's login: prompt for the captcha, then get in or explain why not.
 
@@ -187,14 +209,51 @@ def do_login(client: Client, user: str, pw: str, base_dir: Path) -> None:
     """
     state = submit(client, user, pw, base_dir)
 
-    while state["status"] == CAPTCHA_REQUIRED:
+    # The engine gets one go, not one per image. A captcha is a short random string,
+    # so a second identical-looking reading is very likely to be the same mistake; and
+    # a loop that retries until the site relents is exactly the failure mode this
+    # feature could inflict if the gate were removed. After one wrong guess the human
+    # answers every remaining round.
+    ocr_used = False
+    human_used = 0
+
+    # CAPTCHA_REJECTED is included on purpose: a rejection comes back with a fresh
+    # image, and the loop is what presents it and asks again. Exiting on a rejection
+    # instead is what made the first version give up after the engine's one miss.
+    while state["status"] in (CAPTCHA_REQUIRED, CAPTCHA_REJECTED):
         shot = state["image"]
         print(state["message"])
         print("تصویر اینجا ذخیره شد، بازش کن: {}".format(shot.resolve()))
         print("یا این صفحه را باز کن (بزرگ‌شده): {}".format(state["viewer"].resolve()))
+
+        # Optional, and measured. Five readings are voted on and only submitted when
+        # enough of them agree; captcha.py carries the numbers, which are deliberately
+        # modest — at the measured rate this answers roughly a quarter of logins and
+        # never answers one wrongly. Below the bar, or with CW_OCR=0, this is skipped
+        # and the prompt below happens exactly as it always did.
+        guessed = None if ocr_used else _try_ocr(shot)
+        if guessed:
+            ocr_used = True
+            print("خواندن پیشنهادی: {}  ({} از {} خواندن هم‌خوان؛ همین استفاده می‌شود)".format(
+                guessed["text"], guessed["votes"], guessed["total"]))
+            tried = submit(client, user, pw, base_dir, captcha=guessed["text"])
+            if tried["status"] == CAPTCHA_REJECTED:
+                print("پیشنهاد هم درست نبود. خودت بخوان — تصویر تازه بالا باز شد.")
+            state = tried
+            continue
+
         answer = ask("حروف/اعداد داخل تصویر را بنویس: ")
         if not answer:
             raise CwError("پاسخ کپچا خالی بود، لغو شد.")
+        human_used += 1
+        if human_used > MAX_HUMAN_ATTEMPTS:
+            # A person who has read a 190x40 captcha twice is not going to read it
+            # correctly on the fifth try. Stop, rather than looping against a login
+            # endpoint until they give up.
+            raise CwError(
+                "بعد از {} تلاش کپچا درست خوانده نشد. اگر رمز را از «فراموشی رمز» "
+                "عوض کرده‌ای، اول آن را امتحان کن.".format(human_used - 1)
+            )
         state = submit(client, user, pw, base_dir, captcha=answer)
 
     if state["status"] == OK:

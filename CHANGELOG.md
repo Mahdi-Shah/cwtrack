@@ -35,6 +35,50 @@ the caller hands back the answer. The CLI prompts; a skill shows the image.
 `api.refresh()` also writes `captcha-zoom.html`, the same image at 4×. The site's is
 about 190×40 px, which is hard enough to read that a miss costs a whole round trip.
 
+### Optional captcha OCR
+
+A measured, gated attempt to read the login captcha before asking the user. Off unless
+both the `ocr` extra and a `tesseract` binary are present; `CW_OCR=0` disables it
+explicitly. The default path — a human reading a zoomed image — is unchanged and
+remains the fallback for every uncertain case.
+
+The submission bar is set by measurement, not optimism. On 20 generated samples in the
+plugin's style:
+
+| | |
+|---|---|
+| best single strategy (crop to the ink) | 14/20 |
+| upscale 4× first | 13/20 — worse than not resampling |
+| five-strategy ensemble | 13/20 |
+| auto-submit at ≥70% agreement | 5 submitted, 5 right, 0 wrong |
+| auto-submit at ≥50% agreement | 9 submitted, 8 right, 1 wrong |
+
+So the gate is 70% agreement across five readings, which automates about a quarter of
+logins and never submits a wrong answer. Three findings shaped it, all counter to the
+usual advice:
+
+- `--psm 7` — the textbook single-line mode — reads *nothing* here. The plugin's curved
+  strokes defeat its baseline estimate; psm 8 (a single word) is the right model for a
+  short token, and it is tried first.
+- Upscaling hurt. Cropping to the ink bounding box is what helps.
+- tesseract's confidence is not a usable gate. Correct readings came back at 0.0 and a
+  wrong one at 48, so a threshold discards right answers without ever proving one.
+  Agreement between strategies is the signal instead.
+
+Also found while measuring:
+
+- Restricting tesseract to an uppercase-only whitelist made it read a lowercase `b` as
+  `D` — a silent, confident, wrong answer. Both cases are allowed now and the folding
+  happens in Python.
+- The `stdout` renderer reports no confidence at all in this build, so a parser reading
+  stderr gets 0.0 for every reading; the `tsv` renderer is used instead.
+- Comparing a best-so-far against an initial 0.0 with `>` recorded no reading at all,
+  which reported perfect reads as "no reading".
+
+Bounds, because an unbounded loop against a login endpoint is the failure this feature
+could inflict: one engine attempt per login, never one per image, and three human
+attempts before it stops.
+
 ### Correctness
 
 - **`counts.done` counted an unrecognised status as finished.** It was
@@ -61,8 +105,14 @@ about 190×40 px, which is hard enough to read that a miss costs a whole round t
   read `from cwtrack import api` as a subcommand named `import`, and there is now a
   second test asserting it still matches the commands around it, so a rewrite cannot
   quietly turn it into a no-op.
+- `tests/test_captcha.py` and `tests/test_captcha_login.py` — 37 tests. The vote, the
+  gate, the charset filter that never invents a character, the one-attempt cap, and
+  the guarantee that `CW_OCR=0` or a missing engine leaves the human path untouched.
+  No test needs tesseract: the engine is stubbed and the sample images are generated.
+  The one test that measures against the real engine skips when it is absent, because
+  the unit tests are the contract and that one is the evidence.
 
-## [0.1.0] — 2026-10-05
+353 pass, ruff clean.
 
 First public release.
 

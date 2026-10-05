@@ -131,18 +131,43 @@ yours.
 
 ## The captcha
 
-cw.sharif.ir puts an image captcha on the login form. `fetch` saves the image and
-asks you to read it.
+cw.sharif.ir puts a 190×40 image captcha on the login form. **You read it** — the
+image is saved, and a zoomed viewer is written next to it so it is legible at all.
 
-**It is not solved automatically, and will not be.** The captcha is the site's
-explicit statement that a human is at the keyboard; an automated solver is a
-bot-evasion tool rather than a study aid, and shipping one inside a package that
-lives next to your coursework files is a bad trade. It would also be unreliable —
-distorted-character captchas defeat OCR often enough that you would be re-running
-it constantly.
+An optional OCR will try first, and it is deliberately weak. Measured on 20 generated
+samples of the plugin's style:
 
-One practical tip: the image is about 190×40 px and is genuinely hard to read at
-that size. If it is rejected, just try again.
+| | |
+|---|---|
+| best single strategy (crop to the ink) | 14/20 correct |
+| upscaling 4× before reading | 13/20 — **worse** |
+| five-strategy ensemble | 13/20 correct |
+| auto-submitted at ≥70% agreement | **5 of 20, all 5 right** |
+| auto-submitted at ≥50% agreement | 9 of 20, 8 right and **1 wrong** |
+
+So it reads the image five ways and submits only when at least 70% of them agree. That
+automates roughly a quarter of logins and never automates a wrong one; everything else
+falls back to you. The engine gets **one attempt per login**, never one per image, and
+after three human attempts it stops rather than looping against a login endpoint.
+
+Two findings drove that, both counter to the usual advice: `--psm 7`, the textbook mode
+for a single line of text, reads *nothing* on these images because the plugin's curved
+strokes defeat its baseline estimate; and tesseract's own confidence is useless here —
+correct readings came back at 0.0 and a wrong one at 48 — which is why agreement between
+strategies is the gate and not a confidence threshold.
+
+```powershell
+pip install -e ".[ocr]"          # Pillow, for preprocessing
+winget install UB-Mannheim.TesseractOCR   # the engine itself, a system install
+$env:CW_OCR = "0"                # turn it off, if you would rather always read it
+```
+
+**What this is not.** It does not defeat the captcha, and it is not a bot-evasion tool:
+the captcha is the site stating a person is at the keyboard, and this answers one round
+of it only when five independent readings agree, with you answering the rest. The
+reason it ships weak rather than strong is that raising the submit rate past 70% was
+measured to start submitting wrong answers. If you want to change that, re-run
+`captcha.probe()` first — and read what it says.
 
 ## Scope, honestly
 
@@ -206,7 +231,7 @@ history.
 
 ```powershell
 pip install -e ".[dev]"
-pytest              # 317 tests, no network, no account needed
+pytest              # 353 tests, no network, no account needed
 ruff check src tests tools
 ```
 
@@ -237,6 +262,7 @@ src/cwtrack/
 ├── api.py         the surface a skill calls   <- no stdout, no prompts
 ├── client.py      HTTP, cookies, retry
 ├── auth.py        login and the captcha handshake
+├── captcha.py     optional OCR for it         <- measured, gated, one attempt
 ├── fetch.py       downloading pages
 ├── dates.py       Jalali/Gregorian, relative deadlines   <- pure, no I/O
 ├── classify.py    submission state -> verdict

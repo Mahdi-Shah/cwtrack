@@ -122,8 +122,6 @@ sections 2 to 7 are the user's own writing. Report that rather than forcing it.
 {"status": "captcha_required", "image": Path, "viewer": Path, ...}
 ```
 
-Do this, in this order:
-
 1. Show `viewer` to the user — it is the captcha at 4×, because the site's own image
    is about 190×40 px and genuinely hard to read. Use the preview/preview-file tool on
    that path. Showing `image` directly wastes round trips.
@@ -133,6 +131,27 @@ Do this, in this order:
 If it comes back `captcha_rejected`, a **new** image was already downloaded in the
 response — show that `viewer` and try again. Do not restart from scratch.
 
+**You will usually not get this far.** `api.refresh()` tries to read the captcha itself
+before it asks you, when tesseract and the `ocr` extra are installed. It reads the
+image five ways and submits only when at least 70% of the readings agree; measured on
+20 generated samples that automated 5 of 20 logins and got all 5 right. Otherwise it
+returns `captcha_required` exactly as above and you show the image.
+
+When it does try, the state tells you what happened:
+
+| `result["status"]` | `result["ocr"]` | What to do |
+| --- | --- | --- |
+| `ok` | absent | It worked. Say so and carry on. |
+| `captcha_rejected` | `{reason: "rejected_by_site", ...}` | It read it confidently and was wrong. Show the new `viewer` and ask the user. Say the reading failed — otherwise a wrong guess looks like a wrong password. |
+| `captcha_required` | `{reason: "low_agreement", ...}` | The readings disagreed. Show `viewer`, and mention the tentative reading in `ocr["read"]` so the user can check it quickly. |
+
+The engine gets **one attempt per login**, never one per image. If it has already been
+used, `ocr` is absent and the user answers every remaining round. Up to three human
+attempts are made, then it stops — after that they are squinting, not solving.
+
+`CW_OCR=0` turns it off completely. Nothing above changes; the image is simply shown
+from the start.
+
 `captcha_rejected` after two or three good reads usually means it is not the captcha
 any more. Check whether the password was reset via *forgot password*; cw.sharif.ir
 currently asks every user to do that, and it looks exactly like a credentials failure.
@@ -141,19 +160,27 @@ currently asks every user to do that, and it looks exactly like a credentials fa
 environment. Ask the user to set them, or offer to take a username and password as
 arguments. Never put a password in a command line — argv lands in shell history.
 
-### Why there is no solver
+### Where the line is
 
-Do not write one, do not offer one, and decline if asked. In order of weight:
+The owner has decided the OCR goes in, on the record, and it is shipped as a measured
+and gated convenience rather than a silent override. What that means for you:
 
-1. The captcha is the site's explicit statement that a human is at the keyboard. A
-   solver is a bot-evasion tool, not a study aid.
-2. There is exactly one network entry point and the captcha is on all of it, so a
-   solver would buy nothing.
-3. Distorted-character captchas defeat OCR often enough that it would be a constant
-   tax on the user.
+- **Do not improve it.** No better preprocessing, no higher-agreement mode, no
+  retry-until-it-works. The 70% gate is where the accuracy stops being free; raising it
+  buys a higher submit rate by submitting wrong answers, and the whole point of the
+  measurement was that it does not.
+- **Never submit a reading the user did not give you and the readings did not agree
+  on.** A confident wrong captcha looks exactly like a wrong password from the outside.
+- **Never call the engine twice for one login.** One attempt per login, then the human.
+- **Keep it optional.** `CW_OCR=0` and the absent `ocr` extra must both keep the human
+  path working exactly as it did. If a change breaks either, it is wrong.
+- The captcha is the site's statement that a person is at the keyboard. This feature
+  answers one round of it when the machine is measurably sure, and the person still
+  answers the rest. Keep it that size; do not grow it.
 
-The `viewer` page exists precisely so the human step costs one round trip instead of
-several. That is the design answer to a captcha.
+The `viewer` page exists so the human step costs one round trip instead of several.
+That is the design answer to a captcha, and the OCR is the answer to the *typing*, not
+to the reading.
 
 ## The store
 

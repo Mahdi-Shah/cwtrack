@@ -29,6 +29,7 @@ from datetime import datetime
 from pathlib import Path
 
 from . import auth, tracker
+from . import captcha as captcha_ocr
 from .brief import build_workfolder, open_items, remaining_text
 from .classify import OPEN_BUCKETS
 from .client import DEFAULT_BASE, Client, CwError
@@ -362,6 +363,52 @@ def ingest(dump: str | Path | None = None, data: str | Path | None = None) -> di
     return summary
 
 
+def _attempt_captcha(
+    client, user: str, pw: str, base_dir: Path, given: str | None
+) -> dict:
+    """Log in, using `given` when the caller supplied it.
+
+    With no answer, a confident OCR reading is tried once. If it does not land, the
+    result is `captcha_required` with a *fresh* image, which is the same state the
+    human path has always got — so the skill still shows an image and asks, and the
+    feature cannot introduce a third outcome for it to handle.
+    """
+    state = auth.submit(client, user, pw, base_dir, captcha=given)
+    if given or state["status"] != auth.CAPTCHA_REQUIRED:
+        return state
+
+    # `guess` returns ok=False rather than raising for every "could not read it" case,
+    # but a decode error or an OS problem while writing a variant would escape it, and
+    # that must not take the login down with it.
+    try:
+        guess = captcha_ocr.guess(state["image"])
+    except Exception:  # noqa: BLE001 - a nicety must not break the login
+        state.setdefault("ocr", {"read": "", "agreement": 0.0, "reason": "error"})
+        return state
+    if not guess.get("ok"):
+        # Carry the disagreement into the state so the caller can say why it did not
+        # simply answer — except when OCR is switched off, which is a choice rather
+        # than a failure and has nothing to report.
+        if guess.get("reason") != "disabled":
+            state["ocr"] = {
+                "read": guess.get("text", ""),
+                "agreement": guess.get("agreement", 0.0),
+                "reason": guess.get("reason", ""),
+            }
+        return state
+
+    tried = auth.submit(client, user, pw, base_dir, captcha=guess["text"])
+    if tried["status"] == auth.CAPTCHA_REJECTED:
+        # The OCR read this confidently and was still wrong. Do not try again: hand
+        # back the fresh image and let the human read it, with the reason recorded.
+        tried["ocr"] = {
+            "read": guess["text"],
+            "agreement": guess.get("agreement", 0.0),
+            "reason": "rejected_by_site",
+        }
+    return tried
+
+
 def refresh(
     captcha: str | None = None,
     home: str | Path | None = None,
@@ -405,13 +452,12 @@ def refresh(
     client = Client(base or DEFAULT_BASE)
 
     if not client.logged_in():
-        state = auth.submit(client, name, pw, base_dir, captcha=captcha)
-        if state["status"] != auth.OK:
-            out = {"status": state["status"], "message": state.get("message", "")}
-            if "image" in state:
-                out["image"] = str(state["image"])
-                out["viewer"] = str(state["viewer"])
-            return out
+        # Try the OCR reading before asking, and fall back to asking. Either way the
+        # states are the ones the human path already produces, so the skill file
+        # needs no new branch for the feature.
+        state = _attempt_captcha(client, name, pw, base_dir, captcha)
+        if state["status"] != auth.CAPTCHA_REQUIRED:
+            return state
 
     count = fetch_all(client, base_dir)
     summary = ingest(base_dir / "dump", data_dir)

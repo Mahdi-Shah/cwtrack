@@ -33,9 +33,17 @@ dependencies = []
 [project.optional-dependencies]
 # Better Jalali coverage for years outside the embedded table (1380-1442).
 calendar = ["jdatetime>=2.2"]
+# Optional captcha OCR. Pillow does the preprocessing; the engine is the `tesseract`
+# binary, which is a system install and NOT something pip can bring:
+#   winget install UB-Mannheim.TesseractOCR   /  brew install tesseract
+# Without both, nothing changes - a human reads the captcha, as it always did.
+# CW_OCR=0 turns it off even when both are present.
+ocr = ["Pillow>=9.0"]
 dev = [
     "pytest>=7.4",
     "ruff>=0.4",
+    # Pillow is needed by tests/test_captcha.py, which generates the sample images.
+    "Pillow>=9.0",
     # Only for tests/test_repo.py, which reads the workflow YAML to check it.
     # Kept in dev rather than the main list: nothing the tool runs needs it.
     "pyyaml>=6.0",
