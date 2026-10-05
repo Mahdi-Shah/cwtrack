@@ -16,15 +16,27 @@ cw-data-*/
 # raw page captures from the authenticated session
 .cw/
 
-# generated output
-reports/*.md
-*.pdf
-*.html
-!docs/**/*.html
-
-# working folders created by `cwtrack brief`
+# Working folders created by `cwtrack brief`, and rendered deliverables.
+# Scoped to a few directories on purpose: a bare `*.pdf` or `*.html` also swallows
+# the test fixtures, and the suite then fails on every fresh clone because the
+# tests run on nothing. Generated files live in known places, so name those.
 work/
 briefs/
+output/
+reports/
+rendered/
+
+# Only the dashboard, which is generated into the store and already ignored by
+# cw-data/ below. Test fixtures under tests/fixtures/ must stay tracked.
+index.html
+
+# ---------------------------------------------------------------------------
+# Safety net, and it has to come after the negations above.
+# ---------------------------------------------------------------------------
+# Raw captures anywhere, whatever the directory is called.
+**/dump/**/*.html
+captcha*.png
+*_sesskey*
 
 # ---------------------------------------------------------------------------
 # secrets — belt and braces. Nothing above should get this far.
