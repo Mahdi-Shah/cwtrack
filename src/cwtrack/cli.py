@@ -7,6 +7,7 @@ import contextlib
 import getpass
 import json
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -20,6 +21,25 @@ from .report import fmt_delta, report, table
 
 STATE_DIR = Path(os.environ.get("CW_HOME", ".cw"))
 DUMP_DIR = STATE_DIR / "dump"
+
+
+def _force_utf8_streams() -> None:
+    """Make the Persian output survive a stock Windows console.
+
+    A default Windows console is cp1252, which has no Persian letters, so every
+    message in this tool would raise UnicodeEncodeError on its way out. Reconfiguring
+    the streams fixes pipes and files. An *interactive* console that still shows
+    mojibake is the terminal's own codepage and needs `chcp 65001` - not something
+    this program can fix - which is why `-o` exists.
+
+    Done in a function rather than at import so that importing the package does not
+    mutate global state: a library that silently reconfigures a caller's stdout is
+    a nuisance to debug.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        # Older streams and already-detached ones have nothing to reconfigure.
+        with contextlib.suppress(AttributeError, ValueError):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 def find_data_dir(explicit: str) -> Path:
     """Locate cw-data/ without needing the right working directory.
@@ -96,6 +116,7 @@ def emit(text: str, out: str = "") -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_streams()
     args = build_parser().parse_args(argv)
     base_dir = Path(args.home)
     dump = base_dir / "dump"

@@ -8,6 +8,7 @@ a network or an account: everything below the `fetch` command reads disk.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -169,6 +170,62 @@ class TestBrief:
         user, items = tracker.load(store)
         with_due = [a for a in B.open_items(items, now_epoch) if a.due]
         assert with_due == sorted(with_due, key=lambda a: a.due)
+
+
+class TestStreams:
+    """Persian must survive a stock Windows console, which is cp1252.
+
+    Without the guard, `cwtrack gaps` on a fresh machine raises
+    UnicodeEncodeError on the *first Persian message it prints* - so it fails on the
+    command people run most, on exactly the platform they use.
+    """
+
+    def test_reconfigure_sets_utf8(self):
+        import io
+
+        from cwtrack.cli import _force_utf8_streams
+
+        buf_out, buf_err = io.TextIOWrapper(io.BytesIO(), encoding="cp1252"), io.TextIOWrapper(
+            io.BytesIO(), encoding="cp1252"
+        )
+        real = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = buf_out, buf_err
+        try:
+            _force_utf8_streams()
+            encoding = sys.stdout.encoding
+        finally:
+            sys.stdout, sys.stderr = real
+        assert encoding.lower().replace("-", "") == "utf8"
+
+    def test_persian_output_does_not_raise(self, store, capsysbinary):
+        """The regression itself: write Persian through the real code path."""
+        from cwtrack.cli import main
+
+        main(["gaps", "--data", str(store)])
+        captured = capsysbinary.readouterr().out
+        # It was encoded somewhere; decoding as UTF-8 must work and hold Persian.
+        text = captured.decode("utf-8")
+        assert "ارسال‌نشده" in text or "ارسال" in text
+
+    def test_tolerates_a_stream_that_cannot_reconfigure(self, monkeypatch):
+        """A detached or already-wrapped stream must not crash the tool."""
+        from cwtrack.cli import _force_utf8_streams
+
+        class NoReconfigure:
+            encoding = "utf-8"
+
+            def write(self, s):
+                pass
+
+            def flush(self):
+                pass
+
+        real = sys.stdout
+        monkeypatch.setattr(sys, "stdout", NoReconfigure())
+        try:
+            _force_utf8_streams()  # must not raise
+        finally:
+            monkeypatch.setattr(sys, "stdout", real)
 
 
 class TestCli:
