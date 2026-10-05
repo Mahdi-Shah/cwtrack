@@ -15,7 +15,7 @@ At intake, the format comes from the assignment text first: `در قالب Word`
 **Gather:** course slides and textbook chapters the student supplies. Web only to resolve a specific formula or convention.
 
 **Non-negotiable:**
-- Every step justified. "با استفاده از رابطهٔ ... نتیجه می‌گیریم" is not a step; show what was substituted.
+- Every step justified. "با استفاده از رابطه ... نتیجه می‌گیریم" is not a step; show what was substituted.
 - Units on every intermediate and final value.
 - Show the governing equation with its symbols defined before use.
 - If the problem gives data that looks wrong (a missing sign, an implausible magnitude), flag it — do not silently fix it.
@@ -85,7 +85,7 @@ At intake, the format comes from the assignment text first: `در قالب Word`
 
 ---
 
-## ۶. پروژهٔ کدنویسی (code project)
+## ۶. پروژه کدنویسی (code project)
 
 **Deliver:** working code that runs, plus a short README. Not a code dump.
 
@@ -118,7 +118,7 @@ At intake, the format comes from the assignment text first: `در قالب Word`
 
 ---
 
-## ۹. پروژهٔ طراحی و مهندسی
+## ۹. پروژه طراحی و مهندسی
 
 **Deliver:** the design with its assumptions and constraints explicit, the governing calculations, and the failure modes.
 

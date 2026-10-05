@@ -27,7 +27,7 @@ A visible gap costs the student one sentence. A confident invention costs them t
 
 **Statistics offered without their assumptions.** A p-value with no test named, no n, no alpha, and no check of assumptions is not an answer. Name the test, state n and alpha, and state the assumption that could break it.
 
-**Suppressed uncertainty.** "دقیقاً برابر است با" is a claim. "با دقت اندازه‌گیری ما سازگار است" is a claim. Prefer the second and show the comparison.
+**Suppressed uncertainty.** "دقیقا برابر است با" is a claim. "با دقت اندازه‌گیری ما سازگار است" is a claim. Prefer the second and show the comparison.
 
 ## Marking your own work
 

@@ -77,7 +77,17 @@ Log every source in the brief's ledger with a stable id (`S1`, `S2`, …). This 
 
 Pick the playbook from `references/assignment-types.md` and follow it. The recurring requirements across all types: state what is given with units, show the work rather than asserting the result, and mark every input you were not given.
 
-Some things are the student's to produce and yours to demand: measurements, survey results, personal reflection, and the parts where the assignment is testing their own reasoning. Hand those back with `[نیازمند داده]` and say what to measure. Never fill a data table with plausible numbers — not even clearly-labelled examples inside the delivered document.
+Some things are the student's to produce and yours to demand: measurements, survey results, personal reflection, and the parts where the assignment is testing their own reasoning. Never fill a data table with plausible numbers — not even clearly-labelled examples inside the delivered document.
+
+**But a placeholder is a tool, not a verdict.** It belongs in the delivery note, never on the page, and it is never a reason to hand back a half-built document. When a form has a cell you cannot honestly fill, first ask whether the assignment gives you a true *general* statement that covers it — reasoning about how a whole class of device or system works is not a fabricated measurement, and it often fills the cell honestly. If it does, write it, ship the file complete, and put the residual uncertainty in the delivery note. If it does not, one blank with an explanation beats ten invented ones.
+
+**Read `references/persian-output.md` before writing prose.** No tashkeel ever (`## 0.d`), punctuation proportional to the document (`## 0.e`), and a voice that varies rather than repeats (`## 0.c`). These decide whether the page reads as the student's work.
+
+### 4a. Templates — the course's own form is the spec
+
+If the assignment ships a form, worksheet, or `docx`/`pptx` skeleton, **fill that file.** Do not author a new document in its place. See `references/persian-output.md` `## 0`: measure `w:rFonts/@w:cs` and the per-role sizes before writing a single run, then reproduce them exactly. A mismatched body font is the loudest tell in the whole file and it is entirely avoidable.
+
+Reproduce it in both required formats: the `.docx` by filling the original in place with `python-docx`, and the PDF by hand-writing the HTML with that template's `font-family` stack — **not** `render.py`'s bundled Vazirmatn, which is the house face for documents authored from scratch and the wrong choice once a template exists.
 
 ### 5. Render
 
@@ -89,7 +99,7 @@ python scripts/render.py draft.md --title "..." --subtitle "..." --footer "نی�
 
 - Output PDF path defaults to the source stem. Verify it exists and is non-trivial — the script exits non-zero and says why if it fails.
 - Standalone digits become Persian (`12` → `۱۲`); identifiers stay Latin (`COVID-19`, `ISO-8601`, `3.14.7`). `--digits latin` for a mostly-Latin document.
-- Vazirmatn is bundled in `assets/fonts/` and embedded into the PDF automatically. `--font system` opts out and uses whatever the machine has installed, which is worse for Persian but produces a much smaller intermediate HTML.
+- Vazirmatn is bundled in `assets/fonts/` and embedded into the PDF automatically — for documents you author from scratch. **When a template exists, that template's face wins** (`## 0`, `## 4a`). `--font system` opts out and uses whatever the machine has installed, which is worse for Persian but produces a much smaller intermediate HTML.
 - `.docx` is required when the course says Word. Write the Markdown anyway — it stays the editable master — then convert with the `docx` skill if installed, otherwise say plainly that the Markdown is the deliverable and offer to format it if they install one.
 - Slides are not this script's job. Use python-pptx or the `pptx` skill, and open the result to confirm it renders.
 - Real typeset math needs the LaTeX path (`xelatex` is present); raise it before switching, it needs one setup round-trip. See `references/persian-output.md`.
@@ -99,13 +109,22 @@ python scripts/render.py draft.md --title "..." --subtitle "..." --footer "نی�
 
 Run the checklist in `references/integrity.md`. Then fill in `assets/delivery-template.md` and hand over both.
 
+**Audit the delivered file, not your source string.** Read the `.docx` runs and the text extracted from the final PDF, then assert on those: zero `COMBINING` matches (`## 0.d`), one complex-script font across the document (`## 0`), zero instructional residue or meta-commentary (`## 0.b`). Auditing the string you generated proves nothing — this catches marks that arrived from a transcribed boilerplate passage and from the render path, both of which have happened.
+
 The delivery note is not a formality. The student needs to know which parts are unfinished, which claims you could not verify, and which sections they must write themselves — otherwise they will submit a `[نیازمند داده]` placeholder without noticing.
 
 If the assignment named a page or word limit and the document does not fit, **cut explicitly, never silently.** Say what you shortened and what you sacrificed.
 
 ## Persian output
 
-Follow `references/persian-output.md`. The three that get violated most: use ZWNJ (`می‌شود`, `به‌طور`, `نمی‌توان`); use `،` and `؟` and `؛` not Latin punctuation; write formulas Unicode-first (`F = k·Δx`, `∂u/∂t = α∇²u`) because the PDF pipeline has **no TeX engine** and prints formula source verbatim.
+Read `references/persian-output.md`. The four that get violated most:
+
+- **No tashkeel, ever** (`## 0.d`) — no fatha, kasra, damma, tanween, shadda, sukun, superscript alef, and no hamza-above on a bare `ه`. Persian students type `مهندسی`, never `مهندسی`, so marks read as machine-generated before the content does. Strip them programmatically; do not trust your eye.
+- **A template beats this file's style** (`## 0`) — the course's font, sizes and wording are the spec.
+- **The document stands alone** (`## 0.b`) — no `[نیازمند …]`, no helper text, no reference to the writing process, on the page.
+- **ZWNJ for correctness** (`می‌شود`, `به‌طور`, `نمی‌توان`) regardless of document type, and formulas Unicode-first (`F = k·Δx`, `∂u/∂t = α∇²u`) because the PDF pipeline has **no TeX engine** and prints formula source verbatim.
+
+Punctuation is the fourth axis and it is **proportional**: a problem set or form gets periods and little else (`## 0.e`), an essay gets normal Persian punctuation, a research article gets the full formal set. Do not default to tidy prose punctuation — on a simple assignment it is a signature.
 
 ## Boundaries
 
