@@ -288,25 +288,24 @@ The three places bugs actually lived are the three best-tested modules:
 
 ```
 src/cwtrack/
-├── api.py         the surface a skill calls   <- no stdout, no prompts
-├── client.py      HTTP, cookies, retry
+├── api.py         public entry point for Codex skills  <- returns values, never prompts
+├── access.py      protected connection settings and credential storage
+├── platforms/     CW and Quera adapters
+├── catalog.py     cross-platform classes, tasks and course links
+├── resources.py   course and assignment sources with immutable snapshots
+├── work.py        resumable work, versions, checks and deliveries
+├── study.py       refresh and prepare assignment work
+├── dashboard.py   coursework, resource and work status views
+├── client.py      HTTP, cookies and retry
 ├── auth.py        login and the captcha handshake
-├── captcha.py     optional OCR for it         <- measured, gated, one attempt
-├── fetch.py       downloading pages
-├── dates.py       Jalali/Gregorian, relative deadlines   <- pure, no I/O
-├── classify.py    submission state -> verdict
-├── parse.py       HTML -> assignment rows
-├── match.py       finding unsent work on disk
-├── tracker.py     the on-disk store
-├── dashboard.py   the HTML
-├── brief.py       the handoff
-├── paths.py       where the store, dump and work folder are
-└── cli.py         argparse
+├── captcha.py     optional OCR for it  <- measured, gated, one attempt
+├── dates.py       Jalali/Gregorian deadlines  <- explicit Tehran offset
+└── cli.py         optional terminal interface over the same API
 
-tools/link_skills.py    points the installed skills at .agents/skills/
+tools/link_skills.py    links installed Codex skills to .agents/skills/
 
 .agents/skills/
-├── sharif-cw/              this tool, as an OpenCode skill
+├── sharif-cw/              coursework tracking and assignment intake
 └── university-assignment/  turns an assignment into a submittable PDF
 ```
 

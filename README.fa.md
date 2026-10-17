@@ -282,25 +282,24 @@ wheel جا انداخته بود، یک guard در زمان import که فقط �
 
 ```
 src/cwtrack/
-├── api.py         سطحی که مهارت صدا می‌زند   <- بدون stdout، بدون prompt
+├── api.py         رابط اصلی مهارت‌های Codex  <- مقدار برمی‌گرداند و prompt نمی‌کند
+├── access.py      تنظیم اتصال و نگهداری محافظت‌شدهٔ اعتبارنامه‌ها
+├── platforms/     مبدل‌های CW و کوئرا
+├── catalog.py     کلاس‌ها، تکلیف‌ها و پیوند به درس
+├── resources.py   منابع درس و تکلیف با snapshot تغییرناپذیر
+├── work.py        کار قابل ادامه، نسخه‌ها، بررسی‌ها و تحویل‌ها
+├── study.py       تازه‌سازی سامانه‌ها و آماده‌کردن تکلیف
 ├── client.py      HTTP، کوکی، تلاش مجدد
 ├── auth.py        ورود و دست‌دادن کپچا
 ├── captcha.py     OCR اختیاری کپچا           <- اندازه‌گیری‌شده، دروازه‌دار، یک تلاش
-├── fetch.py       دانلود صفحه‌ها
-├── dates.py       شمسی/میلادی، مهلت نسبی   <- خالص، بدون I/O
-├── classify.py    وضعیت تحویل -> حکم
-├── parse.py       HTML -> سطرهای تکلیف
-├── match.py       پیدا کردن کارِ فرستاده‌نشده روی دیسک
-├── tracker.py     فروشگاه روی دیسک
-├── dashboard.py   HTML
-├── brief.py       تحویل به مهارت بعدی
-├── paths.py       مسیر فروشگاه، dump و پوشهٔ کار
-└── cli.py         argparse
+├── dates.py       مهلت شمسی/میلادی  <- با آفست صریح تهران
+├── dashboard.py   وضعیت تکلیف‌ها، منابع و روند انجام
+└── cli.py         رابط اختیاری ترمینال روی همان API
 
-tools/link_skills.py    وصل کردن مهارت نصب‌شده به .agents/skills/
+tools/link_skills.py    اتصال مهارت نصب‌شدهٔ Codex به .agents/skills/
 
 .agents/skills/
-├── sharif-cw/              همین ابزار، به‌عنوان مهارت OpenCode
+├── sharif-cw/              پیگیری درس و دریافت تکلیف
 └── university-assignment/  تبدیل تکلیف به PDF قابل تحویل
 ```
 

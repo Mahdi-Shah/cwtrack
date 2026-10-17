@@ -404,7 +404,7 @@ class TestTheDashboard:
         def explode(*a, **k):  # pragma: no cover - the point is that it never runs
             raise AssertionError("build_dashboard opened a browser")
 
-        monkeypatch.setattr("os.startfile", explode)
+        monkeypatch.setattr("os.startfile", explode, raising=False)
         out = api.build_dashboard(store, tmp_path / "index.html")
         assert out.is_file()
         assert "font-face" in out.read_text(encoding="utf-8")
@@ -785,13 +785,29 @@ class TestTheSkillsPointAtThisCheckout:
     is a file link, and this is the test that keeps it one.
     """
 
+    def test_check_skips_when_codex_has_not_installed_project_skills(self, tmp_path, monkeypatch):
+        sys.path.insert(0, str(ROOT / "tools"))
+        import link_skills
+
+        monkeypatch.setattr(link_skills, "config_skills_dir", lambda: tmp_path / "missing")
+        assert link_skills.link_all(check_only=True) == 0
+
+    def test_check_allows_an_empty_codex_skills_directory(self, tmp_path, monkeypatch):
+        sys.path.insert(0, str(ROOT / "tools"))
+        import link_skills
+
+        config = tmp_path / "skills"
+        config.mkdir()
+        monkeypatch.setattr(link_skills, "config_skills_dir", lambda: config)
+        assert link_skills.link_all(check_only=True) == 0
+
     def test_no_skill_is_installed_as_a_separate_copy(self):
         sys.path.insert(0, str(ROOT / "tools"))
         import link_skills
 
         config = link_skills.config_skills_dir()
         if not config.is_dir():
-            pytest.skip("no agent config skills directory on this machine")
+            pytest.skip("no Codex config skills directory on this machine")
 
         for name in ("sharif-cw", "university-assignment"):
             installed = config / name

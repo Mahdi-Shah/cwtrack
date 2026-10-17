@@ -292,7 +292,10 @@ class TestNotRequired:
     def test_the_package_still_declares_no_dependencies(self):
         """The OCR must stay optional. Installing cwtrack may not be able to disturb
         a student's environment, and that promise predates this feature."""
-        import tomllib
+        try:
+            import tomllib
+        except ImportError:  # Python 3.9 and 3.10
+            import tomli as tomllib
 
         root = Path(__file__).resolve().parent.parent
         data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
