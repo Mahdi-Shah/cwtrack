@@ -1,8 +1,8 @@
 # cwtrack
 
-Track your own assignments, deadlines and course material on **cw.sharif.ir** — the Sharif University courseware — and see at a glance what you still owe.
+Track CW coursework, Quera classes, deadlines and supplementary course resources, then ask Codex to complete selected work, keep resumable revisions, verify deliverables and prepare them for your review.
 
-Two OpenCode skills and a small Python package. Zero required dependencies, no server, no telemetry.
+Two Codex skills and a small Python package. Zero required dependencies, no server, no telemetry.
 
 ## Use it by asking
 
@@ -15,10 +15,12 @@ the site, and answers. You do not run anything.
 > برای این تکلیف بریف بساز
 > تکلیفمو حل کن
 
-The one thing only a human does is read the login captcha: the skill shows it to you
-enlarged, you say what it says, and it continues. Everything else — fetching,
-parsing Jalali deadlines, deciding what is still owed, writing the brief, handing over
-to the document skill — happens without you touching a command.
+You select which assignment to work on; Codex reads its prompt and materials, saves
+progress as it works, checks the actual outputs, and leaves the final review and upload
+to you. Account credentials can be stored with Windows DPAPI protection. CW's readable
+image captcha is attempted with gated OCR and shown to you when uncertain; Quera's OTP
+is supplied by you. Quera's interactive CAPTCHA cannot yet resume through the local
+HTTP adapter.
 
 ## Use it from a terminal
 
@@ -47,6 +49,10 @@ api.refresh()                    # captcha_required / ok / needs_credentials
 api.status()                     # urgent, soon, unknown, per-course counts
 api.outstanding(days=7)          # what to do this week, with cmids
 api.make_brief(cmid=42694)       # the handoff folder
+intake = api.collect_assignment({"site": {"cmid": 42694}})  # prompt and attachments
+api.work_start({"received": intake["input"]})     # durable, resumable work
+api.study_view()                 # cross-platform classes, assignments and resources
+api.study_refresh()              # refresh configured connections independently
 api.build_dashboard()            # path to the HTML, opened by nobody
 ```
 
@@ -111,23 +117,43 @@ It is one HTML file with the fonts inlined as data URIs. No server, no build ste
 nothing to install to view it. Countdowns refresh themselves every 30 seconds, so
 a tab left open overnight does not quietly become wrong.
 
-## `brief` — the seam to the other skill
+## Assignment completion
 
-`cwtrack` knows an assignment exists and when it is due. `university-assignment`
-knows how to produce the document. `brief` writes the handoff:
+For a selected assignment, `sharif-cw` receives the prompt and attachments and creates
+a versioned work record. `university-assignment` reads that record, course materials
+and user-provided files, solves the assignment in the format its requirements call
+for, and records sources, open questions and verification evidence. The dashboard
+shows the current stage and links to saved deliverables.
 
 ```
-work/<course>/<assignment>/
-├── brief.md      everything the site knows, and what it does not
-├── HANDOFF.md    what to do next, in order
-├── draft.md      where the answer goes
-└── source/       course material
+work/<work_id>/
+├── versions/       immutable input and progress snapshots
+├── deliveries/     immutable, verified output copies
+└── workspace/      brief, editable drafts and working files
 ```
 
-`brief.md` is explicit about the one thing the site does not give us — the
-assignment text — so nobody solves the wrong question confidently. It refuses to
-overwrite an existing folder unless you pass `--force`, because sections 2 to 7 are
-yours.
+Changed prompts invalidate checks tied to the old input; a deadline-only update keeps
+the answer valid. The API marks work ready for student review only when required
+deliverable roles exist and successful checks match the current input and answer.
+Older brief-only projects remain available through `cwtrack brief`.
+
+## Quera and supplementary resources
+
+The shared catalog keeps platform-scoped class and task identities, links classes to a
+student-defined course offering only after an explicit choice, and preserves each
+platform's refresh status independently. Resource files and selected folder members
+can be captured as immutable snapshots, then attached to an offering or exact task.
+Capturing a source does not claim that Codex read it; actual use is recorded against the
+snapshot, content hash, extent, answer section and requirement.
+
+Quera's login state machine, class-link parser and course assignment-list parser are
+implemented, but have not had live account acceptance. The list parser uses the
+authenticated course page's server-rendered assignment array and only accepts it when
+the class identity and available count agree. Submission state and grades remain
+unknown, and prompt/attachment retrieval from assignment details is still incomplete.
+A prompt and its attachments can enter the same resumable work flow as a received input
+with its opaque `assignment_ref`; an unavailable refresh is never shown as an empty
+task list.
 
 ## The captcha
 
@@ -171,8 +197,10 @@ measured to start submitting wrong answers. If you want to change that, re-run
 
 ## Scope, honestly
 
-**Verified against cw.sharif.ir only.** Not other Moodle sites, not other
-universities.
+**The live CW parser is verified against cw.sharif.ir.** Quera class and assignment
+listing have offline fixture coverage but have not been validated with a real account;
+assignment detail retrieval remains incomplete. The adapter reports incomplete data
+rather than inventing an empty list.
 
 The theme (`mb2nl`), the Jalali deadlines, the captcha plugin and the four-column
 assignment table are all specific to that deployment. The Moodle *structure* is
@@ -223,15 +251,16 @@ does should be added.
 gitignored, and so are `.env`, token files and session files. Raw page captures
 contain a live `sesskey` in the logout URL — never commit one.
 
-**Credentials never touch a file.** They come from `CW_USER` / `CW_PASS` in the
-environment, or a prompt with echo off. Not from argv, which would put them in shell
-history.
+**Credentials are never written in plaintext.** The saved-account API uses Windows
+DPAPI-protected local storage and returns `secure_store_unavailable` on platforms
+without an OS vault. The legacy CW CLI can also use `CW_USER` / `CW_PASS`; never put a
+password in argv, where it would land in shell history.
 
 ## Development
 
 ```powershell
 pip install -e ".[dev]"
-pytest              # 353 tests, no network, no account needed
+pytest              # offline behavior tests; no account needed
 ruff check src tests tools
 ```
 

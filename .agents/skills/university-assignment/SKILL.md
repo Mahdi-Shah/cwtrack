@@ -40,25 +40,30 @@ Then read it for the constraints, because these decide the deliverable and they 
 
 ### 2. Brief
 
-**If the `sharif-cw` skill already ran, the brief exists.** It writes a working
-folder with `brief.md` pre-filled with everything the site knows — title, course,
-term, deadline, countdown, status, link — plus `source/` for material, `draft.md` for
-the answer and `HANDOFF.md` with the next steps. `sharif-cw` calls
-`api.make_brief(cmid=<id>)` to create it.
+**When `sharif-cw` supplies a `work_id`, resume the saved work first.** Call
+`api.work_get(work_id)` and use its `workspace` folder for the brief, working files and
+drafts. The saved `input` contains the selected course, assignment text, deadline and
+source; `attachments` contains immutable copies of the original files. Read every
+prompt attachment before solving. Use `api.materials_text(course_id)` for legacy CW
+course materials. For the shared course catalog, inspect the `resources` returned by
+`api.study_prepare()` or `api.resource_view(target=...)`. Open and read the captured
+artifact itself before using it; registration or capture alone is not evidence of use.
+Record the exact snapshot, used extent, parts, answer sections and requirements in
+`work_save(resource_uses=...)`, then keep the source ledger in the brief.
 
-Work in that folder. Its `brief.md` section ۲ (the assignment text) is deliberately
-empty, because the site does not expose it. Fill it in — from the assignment page or
-the lecturer's material — and treat everything else in the file as already-verified.
-Do not re-derive the deadline, and do not trust it blindly either: if the brief's
-deadline disagrees with the page, say so.
+If the intake has open questions or the prompt is missing, ask for the missing text or
+clarification. For missing or changed assignment text, collect the updated input and
+persist it with `work_sync`; for another clarification, record the answer in the saved
+work sections and clear the resolved question through `work_save`. A PDF or image
+attachment is not extracted merely because it was received. Never solve an empty or
+unreadable prompt.
 
-**Do not solve a brief whose section ۲ is still empty.** Ask for the assignment text
-first. A confident answer to the wrong question is the expensive failure here, and in
-the output it looks exactly like success.
-
-Otherwise, copy `assets/brief-template.md` next to the work, fill it in, and keep it.
-Either way it holds the assignment text, the extracted constraints, the open
-questions, the assumptions, and the source ledger.
+For the older brief-only flow, `sharif-cw` may still provide a `brief.md` folder from
+`api.make_brief(cmid=...)`. In that flow, fill section ۲ from the assignment page or
+lecturer's material before solving. Treat its title, course and deadline as retrieved
+data, and report a disagreement with the assignment page. Otherwise, copy
+`assets/brief-template.md` to the working folder and fill it in. The brief holds the
+assignment text, extracted constraints, open questions, assumptions and source ledger.
 
 Give the student the brief before writing anything substantial **when the assignment is large, ambiguous, or the approach has more than one reasonable fork** — one round trip is cheaper than a wrong document. When the assignment is small and clear, state the approach in a sentence and continue; do not make them confirm what they already asked for.
 
@@ -66,7 +71,7 @@ Give the student the brief before writing anything substantial **when the assign
 
 Their course material is authoritative. Web fills gaps; it does not replace.
 
-1. Everything they gave you: slides, جزوه, textbook chapters, previous homework, the lab manual. Read it properly, not by skimming.
+1. Everything they gave you: slides, جزوه, textbook chapters, previous homework, the lab manual, and captured resources attached to the selected course or task. Read the actual files and selected extent, not just the resource registry.
 2. Web, only for what is missing: an unfamiliar formula, a convention you need to check, primary literature for an essay. Search in Persian and English — Persian sources often carry the local convention and the local vocabulary.
 
 Log every source in the brief's ledger with a stable id (`S1`, `S2`, …). This ledger is what makes the document auditable *for you*, and it costs the student nothing.
@@ -112,6 +117,22 @@ Run the checklist in `references/integrity.md`. Then fill in `assets/delivery-te
 **Audit the delivered file, not your source string.** Read the `.docx` runs and the text extracted from the final PDF, then assert on those: zero `COMBINING` matches (`## 0.d`), one complex-script font across the document (`## 0`), zero instructional residue or meta-commentary (`## 0.b`). Auditing the string you generated proves nothing — this catches marks that arrived from a transcribed boilerplate passage and from the render path, both of which have happened.
 
 The delivery note is not a formality. The student needs to know which parts are unfinished, which claims you could not verify, and which sections they must write themselves — otherwise they will submit a `[نیازمند داده]` placeholder without noticing.
+
+For a saved `work_id`, persist the requirements, sources, answer sections, open
+questions and limitations with `api.work_save`. Save the answer before running checks,
+then use the returned `input_fingerprint` and `answer_fingerprint` in each check record
+so evidence is tied to the exact input and answer that were examined. A requirement
+has `id`, `description`, `deliverable_roles` and `verification_method`; a check has
+`requirement_id`, the matching `method`, `result` (`pass`, `fail` or `not_run`),
+`evidence`, both content fingerprints, and `deliverables` listing each inspected
+file's role and SHA-256. Hash every file you intend to deliver and inspect it; an
+unlisted output keeps the work in `needs_completion`. Save the checks, then call
+`api.work_finish` with those output paths and roles plus the delivery note. The API
+copies those files into the immutable work
+history and returns either
+`ready_for_student_review` or `needs_completion`. Only describe the work as ready for
+student review when the API returns `status="ok"`; address or disclose every gap it
+returns. After editing the answer or receiving a changed prompt, rerun affected checks.
 
 If the assignment named a page or word limit and the document does not fit, **cut explicitly, never silently.** Say what you shortened and what you sacrificed.
 

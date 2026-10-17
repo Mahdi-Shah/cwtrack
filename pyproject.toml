@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cwtrack"
 version = "0.1.0"
-description = "Track your own assignments, deadlines and materials on cw.sharif.ir"
+description = "Track coursework, durable assignment work, and course resources"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "cwtrack contributors" }]
-keywords = ["moodle", "assignments", "sharif", "jalali", "student", "tracker"]
+keywords = ["moodle", "quera", "assignments", "sharif", "jalali", "student", "tracker"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",

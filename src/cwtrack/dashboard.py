@@ -21,8 +21,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import html
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 # ---- fonts ---------------------------------------------------------------
 # Fonts ship inside the package so a pip install carries them. An earlier
@@ -263,6 +264,22 @@ h2.sec .count{
   flex:0 0 auto;color:var(--faint);transition:transform .18s;margin-inline-start:2px;
 }
 .course[open] .chev{transform:rotate(90deg)}
+.work-item{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:14px 18px;margin-bottom:10px;
+}
+.work-item .n{font-weight:750;font-size:15px}
+.work-item .meta{color:var(--muted);font-size:12px;margin-top:4px}
+.platform-panel{
+  background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);padding:15px 18px;margin-bottom:18px;
+}
+.platform-item{
+  border-top:1px solid var(--line-2);padding:10px 2px;
+}
+.platform-item .n{font-weight:750;font-size:14px}
+.platform-item .meta{color:var(--muted);font-size:12px;margin-top:3px;overflow-wrap:anywhere}
+.platform-freshness{border-top:1px solid var(--line-2);margin-top:6px;padding-top:5px}
 
 /* ---------- assignment table ---------- */
 .cbody{border-top:1px solid var(--line-2);background:#fdfcfa}
@@ -338,6 +355,197 @@ th{color:var(--muted);font-weight:700;font-size:11.5px;background:#f7f5f0;
 }
 """
 
+REVISION_CSS = """
+:root{
+  --ink:#172526; --ink-2:#425455; --muted:#718282; --faint:#9aa8a7;
+  --line:#dfe8e6; --line-2:#edf2f0; --bg:#f3f7f6; --card:#fff;
+  --accent:#12685b; --accent-soft:#e2f2ee; --overdue:#b33b32;
+  --overdue-soft:#fbe9e7; --soon:#9a620b; --soon-soft:#fff2d9;
+  --done:#24734e; --done-soft:#e7f4ec; --draft:#625b9a; --draft-soft:#efedfa;
+  --shadow:0 1px 2px rgba(16,46,43,.04),0 8px 24px -13px rgba(16,46,43,.22);
+  --shadow-hi:0 10px 32px -16px rgba(16,46,43,.24); --r:18px; --r-sm:11px;
+}
+body{background:radial-gradient(ellipse at 88% 0,#e5f2ef 0,transparent 420px),var(--bg);padding-top:24px}
+.wrap{max-width:1180px}
+.top{align-items:center;gap:17px;margin-bottom:14px;padding:21px 24px;border:1px solid #d6e6e1;border-radius:22px;background:linear-gradient(112deg,#fff 0%,#fafffe 58%,#e8f5f1 100%);box-shadow:var(--shadow)}
+.top .id{width:54px;height:54px;flex-basis:54px;border-radius:17px;background:linear-gradient(145deg,#0e6a5b,#3c9b86);font-size:21px;box-shadow:0 8px 18px -8px rgba(18,104,91,.6)}
+.top h1{font-size:25px;letter-spacing:-.035em}.top .meta{font-size:12px;margin-top:5px}
+.eyebrow{margin:0 0 2px;color:var(--accent);font-size:11px;font-weight:800}
+.section-nav{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 20px}
+.section-nav a{color:var(--ink-2);text-decoration:none;font-size:12px;font-weight:700;padding:7px 12px;border:1px solid var(--line);border-radius:99px;background:#fff}
+.section-nav a:hover,.section-nav a:focus-visible{color:var(--accent);border-color:#a9cfc4;background:var(--accent-soft)}
+.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:14px}
+.section-heading .sec{margin-bottom:3px}.section-description{color:var(--muted);font-size:12px;margin:0}
+.platform-panel,.work-panel{background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:21px 22px;margin:0 0 20px}
+.assignment-search{flex:0 1 300px}.assignment-search input{width:100%;border:1px solid var(--line);border-radius:12px;background:#f8fbfa;color:var(--ink);font:inherit;font-size:12px;padding:9px 12px;outline:none}
+.assignment-search input:focus{border-color:#59a896;box-shadow:0 0 0 3px rgba(18,104,91,.1)}
+.assignment-filters{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:14px 0 10px}
+.assignment-filters button{color:var(--ink-2);background:#f6f9f8;border:1px solid var(--line);border-radius:99px;padding:6px 11px;font:inherit;font-size:11px;font-weight:700;cursor:pointer;transition:.15s ease}
+.assignment-filters button:hover{border-color:#b3d4ca;color:var(--accent)}.assignment-filters button[aria-pressed=true]{background:#176d60;border-color:#176d60;color:#fff}
+.filter-count{margin-inline-start:auto;color:var(--muted);font-size:11px;font-weight:700}
+.assignment-list{display:grid;gap:10px}.assignment-card{background:#fff;border:1px solid var(--line);border-radius:15px;overflow:hidden;transition:border-color .15s,box-shadow .15s,transform .15s}
+.assignment-card:hover{border-color:#b5d6cc;box-shadow:var(--shadow-hi);transform:translateY(-1px)}.assignment-card[hidden]{display:none}
+.assignment-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,230px);gap:15px;padding:15px 17px 12px}
+.assignment-title-group{min-width:0}.assignment-title-group h3{margin:5px 0 2px;font-size:15px;line-height:1.6;font-weight:800}
+.assignment-title-group h3 a{color:var(--ink);text-decoration:none}.assignment-title-group h3 a:hover{color:var(--accent)}
+.platform-badge{display:inline-flex;align-items:center;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-size:10px;font-weight:800;padding:2px 9px}
+.assignment-course{color:var(--muted);font-size:11.5px;margin:0}
+.deadline-box{display:grid;align-content:center;gap:2px;padding:9px 12px;border-radius:12px;background:#f5f8f7;border:1px solid var(--line-2);font-size:11px;color:var(--muted)}
+.assignment-date{font-size:12px;font-weight:750;color:var(--ink-2)}.countdown{font-size:11px;font-weight:800;color:var(--accent)}
+.countdown.hot{color:var(--overdue)}.countdown.soon{color:var(--soon)}.no-deadline{font-size:11px;color:var(--muted)}
+.status-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;padding:12px 17px;border-top:1px solid var(--line-2);border-bottom:1px solid var(--line-2);background:#fbfdfc}
+.status-grid>div{display:grid;align-content:start;gap:4px;min-width:0}.status-grid small{color:var(--muted);font-size:10px;font-weight:650}
+.state-pill,.work-pill{display:inline-flex;align-items:center;justify-self:start;max-width:100%;border-radius:99px;padding:3px 9px;font-size:10.5px;font-weight:800;line-height:1.6}
+.state-todo,.work-needs_completion{background:var(--soon-soft);color:var(--soon)}.state-done,.work-ready_for_student_review{background:var(--done-soft);color:var(--done)}
+.state-overdue{background:var(--overdue-soft);color:var(--overdue)}.state-unknown,.work-not_started{background:#eef1f0;color:#596867}
+.state-value{font-size:11px;font-weight:700;color:var(--ink-2);overflow-wrap:anywhere}.work-ready_to_start{background:#eaf0fb;color:#435f9d}
+.work-in_progress{background:#e6f1fb;color:#286692}.work-under_verification{background:var(--draft-soft);color:var(--draft)}
+.assignment-note,.assignment-relation{margin:9px 17px 0;color:#765a25;font-size:11px}.assignment-relation{color:var(--muted)}
+.assignment-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 17px 13px;color:var(--muted);font-size:10px}
+.assignment-open{color:var(--accent);font-weight:800;text-decoration:none;font-size:11px;white-space:nowrap}.assignment-open:hover{text-decoration:underline}
+.no-matches{padding:26px 12px;text-align:center;color:var(--muted);font-size:12px}
+.platform-classes{border-top:1px solid var(--line);margin-top:14px;padding-top:12px}.platform-classes>summary{display:flex;gap:8px;align-items:center;cursor:pointer;list-style:none;color:var(--ink-2);font-weight:750;font-size:12px}
+.platform-classes>summary::-webkit-details-marker{display:none}.platform-classes>summary:after{content:'⌄';color:var(--muted);margin-inline-start:auto}.platform-classes[open]>summary:after{content:'⌃'}
+.platform-class-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px;margin-top:12px}
+.platform-class{padding:10px 12px;border:1px solid var(--line-2);border-radius:12px;background:#fbfdfc;color:var(--muted);font-size:10.5px}
+.platform-class-name{color:var(--ink);font-weight:750;font-size:12px;margin-bottom:2px}
+.platform-freshness{display:flex;align-items:center;gap:10px 16px;flex-wrap:wrap;border-top:1px solid var(--line-2);margin-top:13px;padding-top:12px;font-size:10px}
+.source-status{font-weight:800;color:var(--done)}.source-unavailable,.source-partial,.source-challenge_required,.source-needs_credentials{color:var(--soon)}.source-time{color:var(--muted)}
+.work-panel .sec{margin-bottom:12px}.work-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-top:9px}
+.work-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.work-card .n{font-size:14px;font-weight:800}
+.work-card .meta{color:var(--muted);font-size:11px;margin-top:3px}.work-card .work-details{display:grid;gap:5px;margin-top:10px}
+.work-card .work-detail{font-size:11px;color:var(--ink-2);margin:0;overflow-wrap:anywhere}.work-card a{color:var(--accent);text-decoration:none;font-weight:700}.work-card a:hover{text-decoration:underline}
+.work-warning{color:var(--overdue)!important}.section-nav,.act,.tl,.tiles,.course,.work-panel,.platform-panel{scroll-margin-top:16px}
+.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:720px){
+  body{padding:14px 12px 42px}.top{padding:17px 15px;border-radius:17px;align-items:flex-start}.top .id{width:44px;height:44px;flex-basis:44px;border-radius:14px}.top h1{font-size:20px}
+  .section-heading{align-items:stretch;flex-direction:column;gap:10px}.assignment-search{flex-basis:auto}.platform-panel,.work-panel{padding:16px 13px;border-radius:15px}
+  .assignment-head{grid-template-columns:1fr;gap:10px;padding:13px}.deadline-box{grid-template-columns:auto 1fr auto;align-items:center}.status-grid{padding:11px 13px;gap:7px}
+  .status-grid small{font-size:9px}.state-pill,.work-pill{font-size:9.5px;padding:3px 7px}.assignment-foot{padding-inline:13px}
+}
+@media(max-width:440px){
+  .top{gap:11px}.top .meta{font-size:10.5px}.status-grid{grid-template-columns:1fr 1fr}.status-grid>div:last-child{grid-column:1/-1}
+  .filter-count{width:100%;margin:3px 0 0}.assignment-foot{align-items:flex-start;flex-direction:column}
+}
+@media print{
+  body{background:#fff}.section-nav,.assignment-filters,.assignment-search,.assignment-open{display:none}
+  .platform-panel,.work-panel,.assignment-card{box-shadow:none;break-inside:avoid}.platform-classes:not([open]) .platform-class-grid{display:grid}
+}
+"""
+
+RESOURCE_CSS = """
+.resource-page{max-width:1180px;margin:0 auto}
+.resource-back{display:inline-flex;align-items:center;gap:7px;margin:0 0 13px;color:var(--accent);font-size:11px;font-weight:800;text-decoration:none}
+.resource-back:hover{text-decoration:underline}
+.resource-hero{position:relative;display:grid;grid-template-columns:minmax(0,1fr) 210px;gap:24px;align-items:center;overflow:hidden;margin-bottom:16px;padding:28px 30px;border:1px solid #cfe4dd;border-radius:24px;background:linear-gradient(110deg,#fff 0%,#f8fffc 55%,#dcefe9 100%);box-shadow:var(--shadow)}
+.resource-hero:after{content:'';position:absolute;inset:auto -42px -128px auto;width:280px;height:280px;border:1px solid rgba(18,104,91,.12);border-radius:50%;box-shadow:0 0 0 28px rgba(18,104,91,.035),0 0 0 58px rgba(18,104,91,.025)}
+.resource-hero-copy,.resource-hero-art{position:relative;z-index:1}
+.resource-hero .eyebrow{font-size:11px;letter-spacing:.02em}
+.resource-hero h1{margin:4px 0 5px;font-size:28px;line-height:1.4;font-weight:850;letter-spacing:-.04em}
+.resource-hero p{max-width:680px;margin:0;color:var(--muted);font-size:12.5px}
+.resource-hero .resource-howto{margin-top:15px;padding:9px 12px;border:1px solid #dcebe6;border-radius:12px;background:rgba(255,255,255,.72);color:var(--ink-2)}
+.resource-hero .resource-howto b{color:var(--accent)}
+.resource-hero-art{display:grid;place-items:center;height:150px;color:var(--accent)}
+.resource-hero-art svg{width:170px;height:150px;overflow:visible}
+.resource-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin-bottom:18px}
+.resource-stat{display:flex;align-items:center;gap:12px;min-height:77px;padding:13px 16px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.9);box-shadow:var(--shadow)}
+.resource-stat-icon{display:grid;place-items:center;width:39px;height:39px;flex:0 0 39px;border-radius:13px;background:var(--accent-soft);color:var(--accent);font-size:16px;font-weight:850}
+.resource-stat strong{display:block;font-size:20px;line-height:1.25;font-weight:850}
+.resource-stat span:last-child{color:var(--muted);font-size:10.5px;font-weight:650}
+.resource-shelf{padding:21px 22px;border:1px solid var(--line);border-radius:20px;background:rgba(255,255,255,.94);box-shadow:var(--shadow)}
+.resource-shelf-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:13px}
+.resource-shelf-head h2{margin:0;font-size:17px;font-weight:850}
+.resource-shelf-head p{margin:2px 0 0;color:var(--muted);font-size:11px}
+.resource-controls{display:grid;grid-template-columns:minmax(200px,300px) 1fr;gap:12px;align-items:center;margin-bottom:14px}
+.resource-search{position:relative}.resource-search:before{content:'⌕';position:absolute;right:12px;top:3px;color:var(--muted);font-size:22px}
+.resource-search input{width:100%;padding:9px 37px 9px 12px;border:1px solid var(--line);border-radius:12px;outline:none;background:#f8fbfa;color:var(--ink);font:inherit;font-size:11.5px}
+.resource-search input:focus{border-color:#59a896;box-shadow:0 0 0 3px rgba(18,104,91,.1)}
+.resource-filters{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.resource-filters button{padding:6px 10px;border:1px solid var(--line);border-radius:99px;background:#f8faf9;color:var(--ink-2);font:inherit;font-size:10.5px;font-weight:750;cursor:pointer;transition:.15s ease}
+.resource-filters button:hover{border-color:#b3d4ca;color:var(--accent)}
+.resource-filters button[aria-pressed=true]{border-color:#176d60;background:#176d60;color:#fff}
+.resource-result-count{margin-inline-start:auto;color:var(--muted);font-size:10.5px;font-weight:750;white-space:nowrap}
+.resource-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr));gap:12px}
+.resource-card{position:relative;display:flex;flex-direction:column;min-width:0;padding:16px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(160deg,#fff 0%,#fff 66%,#f8fbfa 100%);transition:border-color .16s,box-shadow .16s,transform .16s}
+.resource-card:hover{transform:translateY(-2px);border-color:#b8d8ce;box-shadow:var(--shadow-hi)}
+.resource-card[hidden]{display:none}
+.resource-card-top{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.resource-mark{display:grid;place-items:center;width:43px;height:43px;flex:0 0 43px;border-radius:14px;background:var(--accent-soft);color:var(--accent);font-size:10px;font-weight:900;letter-spacing:.03em}
+.resource-mark.web{background:#edf2fb;color:#4b6297}.resource-mark.video{background:#fff0e8;color:#a4552e}.resource-mark.folder{background:#fff5dd;color:#8a651d}
+.resource-classification{min-width:0;flex:1}.resource-classification strong{display:block;color:var(--ink-2);font-size:10.5px;font-weight:800}.resource-classification span{display:block;color:var(--muted);font-size:9.5px}
+.resource-version{align-self:flex-start;padding:3px 8px;border:1px solid var(--line-2);border-radius:99px;background:#fbfdfc;color:var(--muted);font-size:9.5px;font-weight:750}
+.resource-card h3{margin:0;color:var(--ink);font-size:15px;line-height:1.65;font-weight:850;overflow-wrap:anywhere}
+.resource-origin{margin:4px 0 12px;color:var(--muted);font-size:10.5px;overflow-wrap:anywhere}
+.resource-binding-list{display:grid;gap:7px;margin-top:auto;padding-top:11px;border-top:1px solid var(--line-2)}
+.resource-binding{display:flex;align-items:flex-start;gap:8px;color:var(--ink-2);font-size:10.5px;line-height:1.65}
+.resource-binding-icon{color:var(--accent);font-weight:900}
+.resource-binding b{font-weight:800}
+.resource-binding small{display:block;color:var(--muted);font-size:9.5px}
+.resource-card-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--line-2);color:var(--muted);font-size:9.5px}
+.resource-card-foot a{display:inline-flex;align-items:center;gap:5px;color:var(--accent);font-size:10.5px;font-weight:850;text-decoration:none}
+.resource-card-foot a:hover{text-decoration:underline}
+.resource-empty{grid-column:1/-1;display:grid;justify-items:center;gap:5px;min-height:190px;align-content:center;padding:24px;border:1px dashed #bed8d0;border-radius:16px;background:linear-gradient(145deg,#fbfefd,#f3f9f6);text-align:center}
+.resource-empty-icon{display:grid;place-items:center;width:48px;height:48px;margin-bottom:4px;border-radius:16px;background:var(--accent-soft);color:var(--accent);font-size:21px}
+.resource-empty strong{font-size:14px;font-weight:850}.resource-empty p{max-width:440px;margin:0;color:var(--muted);font-size:11px}
+.resource-no-matches{padding:25px;text-align:center;color:var(--muted);font-size:11.5px}
+.resource-footnote{display:flex;align-items:flex-start;gap:9px;margin:12px 2px 0;color:var(--muted);font-size:10px}
+.resource-footnote b{color:var(--ink-2)}
+.resource-course-panel{padding:0;border:0;background:transparent;box-shadow:none;margin:24px 0 26px;scroll-margin-top:18px}
+.resource-course-panel-head{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:17px;padding:0 2px}
+.resource-course-panel-head .eyebrow{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:10px;letter-spacing:.06em}
+.resource-course-panel-head .eyebrow:before{content:'';width:7px;height:7px;border-radius:50%;background:#2d927d;box-shadow:0 0 0 4px #dff1eb}
+.resource-course-panel-head h2{margin:0;color:#172c2b;font-size:23px;line-height:1.35;font-weight:900;letter-spacing:-.035em}
+.resource-course-panel-head p{margin:5px 0 0;color:#687a79;font-size:12px}
+.resource-course-panel-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.resource-course-panel-actions .count{font-size:11px;font-weight:750;color:#435956;padding:8px 12px;border:1px solid #dce8e4;border-radius:12px;background:#fff;box-shadow:0 4px 15px -12px rgba(18,73,63,.4)}
+.resource-course-panel-actions a{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border:1px solid #175e53;border-radius:12px;background:#175e53;color:#fff;font-size:11px;font-weight:850;text-decoration:none;white-space:nowrap;box-shadow:0 6px 15px -9px rgba(18,104,91,.6);transition:transform .15s,background .15s}
+.resource-course-panel-actions a:hover{transform:translateY(-1px);background:#104f46}
+.resource-course-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:15px}
+.resource-course-group{position:relative;min-width:0;overflow:hidden;border:1px solid #dce8e4;border-radius:20px;background:#fff;box-shadow:0 8px 26px -19px rgba(22,64,58,.42);transition:border-color .18s,box-shadow .18s,transform .18s}
+.resource-course-group:hover{transform:translateY(-2px);border-color:#b8d6cd;box-shadow:0 15px 32px -23px rgba(22,64,58,.48)}
+.resource-course-head{position:relative;display:flex;align-items:center;gap:13px;padding:17px 19px;background:linear-gradient(105deg,#edf7f3 0%,#f7fbf9 65%,#fff 100%)}
+.resource-course-head:after{content:'';position:absolute;inset-inline-start:0;top:0;bottom:0;width:3px;background:linear-gradient(#1d7667,#87c1b1)}
+.resource-course-icon{display:grid;place-items:center;width:46px;height:46px;flex:0 0 46px;border:1px solid #d4e8e1;border-radius:15px;background:#fff;color:#176d60;font-size:18px;font-weight:900;box-shadow:0 4px 10px -7px rgba(18,104,91,.45)}
+.resource-course-name{min-width:0;flex:1}
+.resource-course-name h3{margin:0;color:#1a302f;font-size:15px;line-height:1.5;font-weight:900;overflow-wrap:anywhere}
+.resource-course-name span{display:block;margin-top:3px;color:#6a7d7a;font-size:10.5px}
+.resource-course-count{padding:6px 10px;border:1px solid #dce8e4;border-radius:10px;background:rgba(255,255,255,.86);color:#46625c;font-size:10px;font-weight:850;white-space:nowrap}
+.resource-course-list{display:grid;padding:2px 13px 5px}
+.resource-course-item{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:12px;align-items:center;min-width:0;padding:14px 7px;border:0;border-bottom:1px solid #edf2f0;border-radius:0;background:transparent}
+.resource-course-item:last-child{border-bottom:0}
+.resource-course-item .resource-mark{width:42px;height:42px;flex-basis:42px;border:1px solid #d9e9e3;border-radius:13px;background:linear-gradient(145deg,#f6fbf9,#eaf5f1);font-size:9px;box-shadow:inset 0 1px #fff}
+.resource-course-item .resource-mark.web{border-color:#dce4f2;background:linear-gradient(145deg,#f8faff,#ebeff8)}
+.resource-course-item .resource-mark.video{border-color:#f1dfd4;background:linear-gradient(145deg,#fff9f5,#fbeee5)}
+.resource-course-item .resource-mark.folder{border-color:#eee4c8;background:linear-gradient(145deg,#fffdf6,#faf3df)}
+.resource-course-item-main{min-width:0}
+.resource-course-item-main h4{margin:0;color:#1c302e;font-size:13px;line-height:1.6;font-weight:850;overflow-wrap:anywhere}
+.resource-course-item-main p{margin:3px 0 0;color:#768681;font-size:10.5px;line-height:1.55}
+.resource-course-targets{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.resource-course-target{display:inline-flex;align-items:center;gap:5px;padding:4px 8px;border:1px solid #e5eeeb;border-radius:8px;background:#f6faf8;color:#4c6560;font-size:10px;line-height:1.5}
+.resource-course-item>a{align-self:center;display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border:1px solid #dbe8e4;border-radius:10px;background:#fff;color:#176d60;font-size:10px;font-weight:850;text-decoration:none;white-space:nowrap;transition:background .15s,border-color .15s}
+.resource-course-item>a:after{content:'↗';font-size:11px}
+.resource-course-item>a:hover{border-color:#b5d7cc;background:#f1faf6}
+.resource-course-empty{display:grid;justify-items:center;gap:7px;padding:30px 18px;border:1px dashed #b8d8cd;border-radius:18px;background:linear-gradient(135deg,#f8fcfa,#eef7f3);text-align:center}
+.resource-course-empty strong{color:#23453f;font-size:14px;font-weight:850}
+.resource-course-empty p{max-width:480px;margin:0;color:#657a74;font-size:11.5px}
+.resource-section-nav{color:var(--accent)!important;border-color:#cce2da!important;background:#f6fcf9!important}
+.resource-page .foot{margin-top:18px}
+@media(max-width:720px){
+ .resource-hero{grid-template-columns:minmax(0,1fr) 105px;gap:8px;padding:21px 18px;border-radius:18px}
+ .resource-hero h1{font-size:22px}.resource-hero-art{height:105px}.resource-hero-art svg{width:110px;height:100px}
+ .resource-stats{gap:7px}.resource-stat{min-height:68px;padding:9px;gap:8px}.resource-stat-icon{width:32px;height:32px;flex-basis:32px;border-radius:11px;font-size:13px}.resource-stat strong{font-size:17px}.resource-stat span:last-child{font-size:9px}
+ .resource-shelf{padding:16px 13px}.resource-shelf-head{align-items:flex-start;flex-direction:column;gap:3px}.resource-controls{grid-template-columns:1fr;gap:8px}.resource-result-count{margin-inline-start:auto}
+ .resource-course-panel{margin:19px 0 22px}.resource-course-panel-head{align-items:flex-start;flex-direction:column;gap:11px}.resource-course-panel-head h2{font-size:21px}.resource-course-panel-actions{width:100%;justify-content:space-between}
+ .resource-course-group{border-radius:16px}.resource-course-head{padding:14px}.resource-course-item{grid-template-columns:40px minmax(0,1fr) auto;gap:9px;padding:12px 3px}.resource-course-item .resource-mark{width:38px;height:38px;flex-basis:38px}
+}
+@media(max-width:440px){
+ .resource-hero{grid-template-columns:1fr;padding:19px 16px}.resource-hero-art{display:none}.resource-hero h1{font-size:21px}.resource-hero .resource-howto{font-size:10.5px}
+ .resource-stats{grid-template-columns:1fr}.resource-stat{min-height:58px}.resource-filters{gap:5px}.resource-filters button{font-size:9.5px;padding:5px 8px}
+ .resource-card{padding:13px}.resource-course-item{grid-template-columns:38px minmax(0,1fr)}.resource-course-item>a{grid-column:2;justify-self:start;margin-top:1px}
+}
+@media print{.resource-back,.resource-controls,.resource-hero-art,.resource-card-foot a{display:none}.resource-card,.resource-stat{box-shadow:none;break-inside:avoid}}
+"""
+
 JS = """
 function tick(){
   var now = Date.now()/1000;
@@ -368,6 +576,58 @@ function tick(){
 }
 document.addEventListener('DOMContentLoaded', tick);
 setInterval(tick, 30000);
+
+function formatLocalDates(){
+  document.querySelectorAll('[data-local-date]').forEach(function(node){
+    var raw = node.getAttribute('data-local-date');
+    var date = new Date(raw);
+    if(!raw || raw === 'نامشخص' || Number.isNaN(date.getTime())) return;
+    try{
+      var full = node.classList.contains('assignment-date');
+      var formatter = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+        timeZone:'Asia/Tehran', dateStyle:full ? 'full' : 'medium', timeStyle:'short'
+      });
+      node.textContent = formatter.format(date);
+    }catch(_){ node.textContent = raw; }
+  });
+}
+
+function setupAssignmentFilters(){
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.assignment-card'));
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-assignment-filter]'));
+  var search = document.getElementById('assignment-search');
+  var counter = document.getElementById('assignment-count');
+  var empty = document.querySelector('.no-matches');
+  var selected = 'all';
+  function apply(){
+    var query = search ? search.value.trim().toLocaleLowerCase('fa') : '';
+    var now = Date.now()/1000;
+    var shown = 0;
+    cards.forEach(function(card){
+      var haystack = (card.getAttribute('data-title')+' '+card.getAttribute('data-course')).toLocaleLowerCase('fa');
+      var due = Number(card.getAttribute('data-due-epoch'));
+      var state = card.getAttribute('data-submission');
+      var pass = !query || haystack.indexOf(query) >= 0;
+      if(selected === 'soon') pass = pass && Number.isFinite(due) && due <= now+7*86400 && due >= now-7*86400;
+      if(selected === 'check') pass = pass && state === 'check';
+      if(selected === 'submitted') pass = pass && state === 'submitted';
+      card.hidden = !pass;
+      if(pass) shown++;
+    });
+    if(counter) counter.textContent = new Intl.NumberFormat('fa-IR').format(shown)+' مورد';
+    if(empty) empty.hidden = shown !== 0;
+  }
+  buttons.forEach(function(button){
+    button.addEventListener('click', function(){
+      selected = button.getAttribute('data-assignment-filter');
+      buttons.forEach(function(other){ other.setAttribute('aria-pressed', other === button ? 'true' : 'false'); });
+      apply();
+    });
+  });
+  if(search) search.addEventListener('input', apply);
+  apply();
+}
+document.addEventListener('DOMContentLoaded', function(){ formatLocalDates(); setupAssignmentFilters(); });
 """
 
 # ---- helpers -------------------------------------------------------------
@@ -674,19 +934,892 @@ def order(items):
     return items
 
 
+WORK_STAGE_FA = {
+    "ready_to_start": "آمادهٔ شروع",
+    "in_progress": "در حال انجام",
+    "under_verification": "در حال بررسی",
+    "needs_completion": "نیازمند تکمیل",
+    "ready_for_student_review": "آمادهٔ بررسی دانشجو",
+}
+
+SUBMISSION_LABELS = {
+    "not_submitted": ("ارسال نشده", "todo"),
+    "not submitted": ("ارسال نشده", "todo"),
+    "no submission": ("ارسال نشده", "todo"),
+    "open": ("باز؛ منتظر ارسال", "todo"),
+    "draft": ("پیش‌نویس", "todo"),
+    "overdue": ("مهلت گذشته؛ ارسال نشده", "overdue"),
+    "closed": ("مهلت بسته شده؛ وضعیت تحویل را بررسی کن", "overdue"),
+    "submitted": ("ارسال شده", "done"),
+    "submitted for grading": ("ارسال شده؛ در انتظار ارزیابی", "done"),
+    "sent for grading": ("ارسال شده؛ در انتظار ارزیابی", "done"),
+    "sent for marking": ("ارسال شده؛ در انتظار ارزیابی", "done"),
+    "graded": ("ارزیابی شده", "done"),
+    "accepted": ("پذیرفته شده", "done"),
+    "rejected": ("نیازمند اصلاح", "todo"),
+    "ارسال نشده": ("ارسال نشده", "todo"),
+    "ارسال‌نشده": ("ارسال نشده", "todo"),
+    "ارسال شده": ("ارسال شده", "done"),
+    "ارسال‌شده": ("ارسال شده", "done"),
+    "تحویل شده": ("ارسال شده", "done"),
+    "تحویل‌شده": ("ارسال شده", "done"),
+    "مهلت گذشته": ("مهلت گذشته؛ ارسال نشده", "overdue"),
+}
+
+EVALUATION_LABELS = {
+    "graded": "ارزیابی شده",
+    "pending": "در انتظار ارزیابی",
+    "accepted": "پذیرفته شده",
+    "rejected": "نیازمند اصلاح",
+}
+
+
+def _task_key(ref: dict) -> tuple:
+    return tuple(
+        ref.get(key)
+        for key in ("connection_id", "class_id", "assignment_id", "question_id")
+    )
+
+
+def _due_epoch(value) -> int | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
+    except (ValueError, OverflowError, OSError):
+        return None
+
+
+def _legacy_platform_assignments(assignments: list, study: dict, refreshed: str) -> list[dict]:
+    """Adapt the original CW store into the same read model as connected platforms."""
+    connection_by_class = {
+        str(item.get("ref", {}).get("class_id")): item.get("ref", {}).get("connection_id")
+        for item in study.get("classes", [])
+        if item.get("platform") == "cw"
+    }
+    known = {
+        (str(item.get("class_ref", {}).get("class_id")), str(item.get("ref", {}).get("assignment_id")))
+        for item in study.get("platform_assignments", [])
+        if item.get("platform") == "cw"
+    }
+    rows = []
+    for item in assignments:
+        class_id, assignment_id = str(item.course_id), str(item.cmid)
+        if (class_id, assignment_id) in known:
+            continue
+        connection_id = connection_by_class.get(class_id) or "cw-legacy"
+        ref = {
+            "connection_id": connection_id,
+            "class_id": class_id,
+            "assignment_id": assignment_id,
+        }
+        deadlines = []
+        if item.due:
+            try:
+                deadline = datetime.fromtimestamp(item.due, timezone.utc).isoformat()
+            except (OverflowError, OSError, ValueError):
+                deadline = ""
+            if deadline:
+                deadlines.append({"kind": "regular", "at": deadline, "raw": item.due_text})
+        rows.append({
+            "kind": "assignment",
+            "ref": ref,
+            "class_ref": {key: ref[key] for key in ("connection_id", "class_id")},
+            "title": item.name,
+            "course_title": item.course,
+            "url": item.url,
+            "platform": "cw",
+            "submission": {
+                "state": item.status_text or "unknown",
+                "raw": item.status_text or "",
+            },
+            "evaluation": {
+                "state": "graded" if item.grade and item.grade != "-" else "unknown",
+                "grade": item.grade or None,
+            },
+            "deadlines": deadlines,
+            "last_success_at": refreshed or "",
+            "legacy_course_id": item.course_id,
+            "legacy_assignment_id": item.cmid,
+        })
+    return rows
+
+
+def _submission_presentation(platform: str, submission: dict) -> tuple[str, str, str, str]:
+    state = str(submission.get("state") or "unknown").strip()
+    raw = str(submission.get("raw") or "").strip()
+    canonical = state.casefold()
+    if canonical in {"", "unknown", "none"} and raw:
+        canonical = raw.casefold()
+    known = SUBMISSION_LABELS.get(canonical)
+    if known:
+        filter_state = (
+            "submitted" if known[1] == "done"
+            else "check" if canonical == "closed"
+            else "todo"
+        )
+        return known[0], known[1], filter_state, ""
+    if canonical in {"", "unknown", "none", "-", "—"}:
+        if platform == "quera":
+            return (
+                "وضعیت ارسال از کوئرا دریافت نمی‌شود",
+                "unknown",
+                "check",
+                "برای اطمینان در کوئرا بررسی شود",
+            )
+        return (
+            "وضعیت ارسال از سامانه دریافت نشده",
+            "unknown",
+            "check",
+            "وضعیت تحویل را در خود سامانه بررسی کن",
+        )
+    # CW may expose a localized status added by the site. Keep that source text
+    # visible rather than silently converting a new value into a known state.
+    return raw or state, "unknown", "check", "این عبارت مستقیماً از سامانه آمده است"
+
+
+def work_panel(items: list[dict], resources: dict | None = None) -> str:
+    """Render saved assignment work without interpreting site submission state."""
+    resources = resources or {}
+    cards = []
+    for item in items:
+        source = item.get("input", {})
+        name = esc(source.get("title") or "تکلیف بدون عنوان")
+        course = esc(source.get("course") or "")
+        stage = WORK_STAGE_FA.get(item.get("stage"), "مرحله نامشخص")
+        updated = esc(str(item.get("updated_at") or "").replace("T", " ")[:16])
+        questions = item.get("open_questions", [])
+        meta = " · ".join(part for part in (course, updated) if part)
+        details = []
+        if item.get("needs_reassessment"):
+            details.append("<div class='meta'>ورودی تکلیف تغییر کرده و نیازمند بازبینی است.</div>")
+        if questions:
+            details.append(
+                "<div class='meta'>منتظر پاسخ: {}</div>".format(
+                    "، ".join(esc(question) for question in questions)
+                )
+            )
+        delivery = item.get("delivery", {})
+        delivered_files = delivery.get("files", [])
+        if delivered_files:
+            links = []
+            for file in delivered_files:
+                try:
+                    href = Path(file["path"]).resolve().as_uri()
+                except (KeyError, OSError, ValueError):
+                    continue
+                links.append(
+                    "<a href='{}'>{}</a>".format(esc(href), esc(file.get("name", "فایل خروجی")))
+                )
+            if links:
+                details.append("<div class='meta'>فایل‌ها: {}</div>".format(" · ".join(links)))
+        for use in item.get("resource_uses", []):
+            resource = resources.get(use.get("resource_id"), {})
+            used_extent = _extent_text(use.get("used_extent", {}))
+            parts = "، ".join(esc(part) for part in use.get("part_ids", []))
+            purpose = esc(use.get("purpose", ""))
+            details.append(
+                "<div class='meta'>منبع استفاده‌شده: {} · محدودهٔ {} · بخش‌ها: {} · {}</div>"
+                .format(
+                    esc(resource.get("title") or "منبع نسخه‌دار"),
+                    used_extent,
+                    parts,
+                    purpose,
+                )
+            )
+        cards.append(
+            "<article class='work-card' data-stage='{}'><div class='work-card-head'>"
+            "<div><div class='n'>{}</div><div class='meta'>{}</div></div>"
+            "<span class='work-pill work-{}'>{}</span></div>"
+            "<div class='work-details'>{}</div></article>".format(
+                esc(item.get("stage") or "unknown"), name, esc(meta),
+                esc(item.get("stage") or "not_started"), esc(stage), "".join(details)
+            )
+        )
+    if not items:
+        return ""
+    return (
+        "<section class='work-panel' id='work-items'><h2 class='sec'>پیشرفت کار روی پاسخ "
+        "<span class='count'>{} کار</span></h2>{}</section>"
+    ).format(len(items), "".join(cards))
+
+
+def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
+    """Render site submission, evaluation and local answer progress as distinct states."""
+    work_items = work_items or []
+    classes = {
+        (item.get("ref", {}).get("connection_id"), item.get("ref", {}).get("class_id")): item
+        for item in study.get("classes", [])
+    }
+    relations_by_task = {}
+    for relation in study.get("assignment_relations", []):
+        for ref in relation.get("task_refs", []):
+            relations_by_task.setdefault(_task_key(ref), []).append(relation)
+    work_by_task = {
+        _task_key(item.get("input", {}).get("assignment_ref", {})): item
+        for item in work_items
+        if isinstance(item.get("input", {}).get("assignment_ref"), dict)
+    }
+    work_by_site = {
+        (str(item.get("input", {}).get("course_id")), str(item.get("input", {}).get("cmid"))): item
+        for item in work_items
+        if item.get("input", {}).get("source") == "site"
+        and item.get("input", {}).get("course_id") is not None
+        and item.get("input", {}).get("cmid") is not None
+    }
+    labels = {"cw": "شارپ", "quera": "کوئرا"}
+    cards = []
+    assignments = sorted(
+        study.get("platform_assignments", []),
+        key=lambda item: _due_epoch(next(iter(item.get("deadlines", [])), {}).get("at"))
+        if item.get("deadlines") and isinstance(item["deadlines"][0], dict)
+        and _due_epoch(item["deadlines"][0].get("at")) is not None
+        else (1 << 62),
+    )
+    for assignment in assignments:
+        class_ref = assignment.get("class_ref", {})
+        class_item = classes.get((
+            class_ref.get("connection_id"), class_ref.get("class_id")
+        ), {})
+        platform = assignment.get("platform", "")
+        submission = assignment.get("submission", {}) or {}
+        submission_label, submission_tone, submission_filter, submission_note = (
+            _submission_presentation(platform, submission)
+        )
+        evaluation = assignment.get("evaluation", {}) or {}
+        evaluation_state = str(evaluation.get("state") or "unknown").casefold()
+        grade = str(evaluation.get("grade") or "").strip()
+        evaluation_label = (
+            "نمرهٔ {}".format(grade) if grade and grade != "-"
+            else EVALUATION_LABELS.get(evaluation_state, "اطلاعات ارزیابی دریافت نشده")
+        )
+        deadline = next(iter(assignment.get("deadlines", [])), {})
+        due = deadline.get("at") if isinstance(deadline, dict) else ""
+        due_epoch = _due_epoch(due)
+        freshness = assignment.get("last_success_at") or "نامشخص"
+        relation_notes = [
+            "تکلیف مرتبط؛ روند انجام مستقل: {}".format(
+                relation.get("reason", "")
+            )
+            for relation in relations_by_task.get(_task_key(assignment.get("ref", {})), [])
+        ]
+        local_work = work_by_task.get(_task_key(assignment.get("ref", {})))
+        if local_work is None and assignment.get("legacy_course_id") is not None:
+            local_work = work_by_site.get((
+                str(assignment["legacy_course_id"]),
+                str(assignment.get("legacy_assignment_id")),
+            ))
+        work_stage = (
+            WORK_STAGE_FA.get(local_work.get("stage"), "مرحله نامشخص")
+            if local_work else "پروندهٔ انجام در این برنامه ثبت نشده"
+        )
+        work_tone = local_work.get("stage", "not_started") if local_work else "not_started"
+        title = assignment.get("title") or "تکلیف بدون عنوان"
+        course = class_item.get("title") or assignment.get("course_title") or "درس نامشخص"
+        url = assignment.get("url") or "#"
+        deadline_html = (
+            "<time class='assignment-date' data-local-date='{}'>{}</time>"
+            "<span class='countdown' data-due='{}'></span>".format(
+                esc(due), esc(due), due_epoch
+            ) if due_epoch is not None else "<span class='no-deadline'>مهلت در دریافت اخیر ثبت نشده</span>"
+        )
+        note_html = (
+            "<p class='assignment-note'>{}</p>".format(esc(submission_note))
+            if submission_note else ""
+        )
+        relation_html = "".join(
+            "<p class='assignment-relation'>{}</p>".format(esc(note))
+            for note in relation_notes
+        )
+        cards.append(
+            "<article class='assignment-card' data-title='{}' data-course='{}' "
+            "data-platform='{}' data-submission='{}' data-due-epoch='{}'>"
+            "<div class='assignment-head'><div class='assignment-title-group'>"
+            "<span class='platform-badge'>{}</span>"
+            "<h3><a href='{}' target='_blank' rel='noreferrer'>{}</a></h3>"
+            "<p class='assignment-course'>{}</p></div>"
+            "<div class='deadline-box'><span>مهلت</span>{}</div></div>"
+            "<div class='status-grid'>"
+            "<div><small>وضعیت تحویل</small><span class='state-pill state-{}'>{}</span></div>"
+            "<div><small>نتیجهٔ ارزیابی</small><span class='state-value'>{}</span></div>"
+            "<div><small>پیشرفت انجام</small><span class='work-pill work-{}'>{}</span></div>"
+            "</div>{}{}"
+            "<div class='assignment-foot'><span>آخرین دریافت: <time data-local-date='{}'>{}</time></span>"
+            "<a class='assignment-open' href='{}' target='_blank' rel='noreferrer'>"
+            "رفتن به تکلیف <span aria-hidden='true'>←</span></a></div></article>".format(
+                esc(title), esc(course), esc(platform), submission_filter,
+                due_epoch if due_epoch is not None else "",
+                esc(labels.get(platform, platform or "سامانه")), esc(url), esc(title),
+                esc(course), deadline_html, submission_tone, esc(submission_label),
+                esc(evaluation_label), esc(work_tone), esc(work_stage), note_html,
+                relation_html, esc(freshness), esc(freshness), esc(url),
+            )
+        )
+
+    connection_cards = []
+    for connection in study.get("connections", []):
+        label = labels.get(connection.get("platform"), connection.get("platform", "سامانه"))
+        status = connection.get("last_attempt_status") or "نامشخص"
+        status_label = {
+            "ok": "دریافت کامل",
+            "partial": "دریافت ناقص",
+            "unavailable": "سامانه در دسترس نبود",
+            "challenge_required": "ورود یا تأیید لازم است",
+            "needs_credentials": "اطلاعات ورود لازم است",
+        }.get(status, status)
+        latest = connection.get("last_attempt_at") or "نامشخص"
+        success = connection.get("last_success_at") or "دریافت موفقی ثبت نشده"
+        connection_cards.append(
+            "<span class='source-status source-{}'>{} · {}</span>"
+            "<span class='source-time'>آخرین تلاش: <time data-local-date='{}'>{}</time>"
+            " · آخرین دریافت کامل: <time data-local-date='{}'>{}</time></span>".format(
+                esc(status), esc(label), esc(status_label), esc(latest), esc(latest),
+                esc(success), esc(success),
+            )
+        )
+    class_cards = []
+    tracking_labels = {"current": "جاری", "archived": "بایگانی‌شده", "unknown": "نیم‌سال نامشخص"}
+    for item in study.get("classes", []):
+        offering = item.get("offering") or {}
+        tracking = item.get("tracking") or {}
+        course = offering.get("title") or "درس پیوند داده نشده"
+        term = offering.get("term") or tracking.get("term") or "ترم نامشخص"
+        state = tracking_labels.get(tracking.get("state"), "نیم‌سال نامشخص")
+        label = labels.get(item.get("platform"), item.get("platform", "سامانه"))
+        class_cards.append(
+            "<article class='platform-class'><div class='platform-class-name'>{}</div>"
+            "<div>{} · {} · <span class='tracking-state'>{}</span></div></article>".format(
+                esc(item.get("title") or "درس بدون عنوان"),
+                esc(label), esc(course), esc("{} · {}".format(term, state)),
+            )
+        )
+    if not cards and not connection_cards and not class_cards:
+        return ""
+    body = "".join(cards) or "<div class='empty'>در دریافت کامل اخیر تکلیفی دیده نشد.</div>"
+    class_details = (
+        "<details class='platform-classes'><summary>کلاس‌های متصل "
+        "<span class='count'>{} کلاس</span></summary><div class='platform-class-grid'>{}</div></details>"
+        .format(len(class_cards), "".join(class_cards))
+        if class_cards else ""
+    )
+    return (
+        "<section class='platform-panel' id='platform-tasks'>"
+        "<div class='section-heading'><div><p class='eyebrow'>CW شریف و کوئرا</p>"
+        "<h2 class='sec'>تکالیف سامانه‌ها <span class='count'>{} تکلیف</span></h2>"
+        "<p class='section-description'>وضعیت تحویل، ارزیابی و پیشرفت پاسخ هرکدام جداگانه نمایش داده می‌شود.</p>"
+        "</div><label class='assignment-search'><span class='visually-hidden'>جست‌وجوی تکلیف</span>"
+        "<input id='assignment-search' type='search' placeholder='جست‌وجوی تکلیف یا درس' autocomplete='off'></label></div>"
+        "<div class='assignment-filters' role='group' aria-label='فیلتر تکالیف'>"
+        "<button type='button' data-assignment-filter='all' aria-pressed='true'>همه</button>"
+        "<button type='button' data-assignment-filter='soon' aria-pressed='false'>مهلت نزدیک</button>"
+        "<button type='button' data-assignment-filter='check' aria-pressed='false'>بررسی در سامانه</button>"
+        "<button type='button' data-assignment-filter='submitted' aria-pressed='false'>ارسال‌شده‌ها</button>"
+        "<span class='filter-count' id='assignment-count'>{} مورد</span></div>"
+        "<div class='assignment-list'>{}</div><p class='no-matches' hidden>با این فیلتر تکلیفی پیدا نشد.</p>{}"
+        "<div class='platform-freshness'>{}</div></section>"
+    ).format(
+        len(cards), len(cards), body, class_details, "".join(connection_cards)
+    )
+
+
+RESOURCE_KIND_LABELS = {
+    "file": "فایل محلی",
+    "remote_file": "فایل اینترنتی",
+    "web": "صفحهٔ وب",
+    "video": "ویدئو",
+    "folder": "پوشه",
+}
+RESOURCE_PROVENANCE_LABELS = {
+    "student": "افزوده‌شده توسط شما",
+    "quera-course": "منبع درس در کوئرا",
+    "manufacturer": "سازندهٔ قطعه",
+}
+
+
+def _resource_kind(resource: dict) -> tuple[str, str, str]:
+    location = resource.get("location") or {}
+    kind = location.get("kind", "unknown")
+    family = kind
+    if kind in {"file", "remote_file"}:
+        filename = (
+            Path(location.get("path", "")).name if kind == "file"
+            else urlparse(location.get("url", "")).path.rsplit("/", 1)[-1]
+        )
+        extension = Path(filename).suffix.lstrip(".").upper()
+        mark = extension[:5] or "FILE"
+        family = "file"
+    else:
+        mark = {"web": "WEB", "video": "▶", "folder": "DIR"}.get(kind, "REF")
+    return kind, family, mark
+
+
+def _resource_location(resource: dict) -> tuple[str, str]:
+    location = resource.get("location") or {}
+    kind = location.get("kind")
+    if kind == "file":
+        path = Path(location.get("path", "")).expanduser()
+        label = path.name or "فایل محلی"
+        try:
+            return label, path.resolve().as_uri()
+        except (OSError, ValueError):
+            return label, ""
+    if kind == "folder":
+        path = Path(location.get("path", "")).expanduser()
+        return path.name or "پوشهٔ محلی", ""
+    url = location.get("url")
+    if isinstance(url, str):
+        parsed = urlparse(url)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            return parsed.netloc, url
+    return "مسیر ثبت نشده", ""
+
+
+def _resource_scope(extent: dict) -> str:
+    if not isinstance(extent, dict) or not extent:
+        return "کل منبع"
+    parts = []
+    for key, value in extent.items():
+        if key == "pages":
+            label = "صفحه‌های {}".format(value)
+        elif key in {"section", "sections"}:
+            label = "بخش {}".format(value)
+        elif key in {"chapter", "chapters"}:
+            label = "فصل {}".format(value)
+        elif key in {"time", "time_range"}:
+            label = "بازهٔ زمانی {}".format(value)
+        elif key == "files":
+            label = "فایل‌های انتخاب‌شده"
+        else:
+            label = "{}: {}".format(key, value)
+        parts.append(esc(label))
+    return "، ".join(parts)
+
+
+def _resource_target_label(binding: dict, study: dict) -> str:
+    target = binding.get("target") or {}
+    offering_id = target.get("offering_id")
+    if offering_id:
+        offering = next(
+            (item for item in study.get("offerings", []) if item.get("id") == offering_id),
+            None,
+        )
+        return (offering or {}).get("title") or str(offering_id)
+
+    task_ref = target.get("task_ref")
+    if isinstance(task_ref, dict):
+        task = next(
+            (
+                item for item in study.get("platform_assignments", [])
+                if _task_key(item.get("ref", {})) == _task_key(task_ref)
+            ),
+            None,
+        )
+        course = next(
+            (
+                item for item in study.get("classes", [])
+                if item.get("ref", {}).get("connection_id") == task_ref.get("connection_id")
+                and item.get("ref", {}).get("class_id") == task_ref.get("class_id")
+            ),
+            None,
+        )
+        course_name = ""
+        if course:
+            course_name = (course.get("offering") or {}).get("title") or course.get("title", "")
+        task_name = task.get("title", "") if task else ""
+        if course_name and task_name:
+            return "{} · {}".format(course_name, task_name)
+        return task_name or course_name or "تکلیف انتخاب‌شده"
+    return "درس یا تکلیف نامشخص"
+
+
+def _resource_catalog(study: dict) -> list[dict]:
+    resources = {
+        item.get("id"): item for item in study.get("resources", []) if item.get("id")
+    }
+    grouped: dict[str, dict] = {}
+    for binding in study.get("resource_bindings", []):
+        if not binding.get("active", True):
+            continue
+        resource_id = binding.get("resource_id")
+        resource = resources.get(resource_id)
+        if not resource:
+            continue
+        entry = grouped.setdefault(
+            resource_id, {"resource": resource, "bindings": [], "captures": []}
+        )
+        entry["bindings"].append(binding)
+
+    for capture in study.get("resource_captures", []):
+        if capture.get("resource_id") in grouped:
+            grouped[capture["resource_id"]]["captures"].append(capture)
+    return sorted(
+        grouped.values(),
+        key=lambda item: (item["resource"].get("title") or "").casefold(),
+    )
+
+
+def _resource_course_target(binding: dict, study: dict) -> tuple[tuple, str, str, str]:
+    target = binding.get("target") or {}
+    offering_id = target.get("offering_id")
+    if offering_id:
+        offering = next(
+            (item for item in study.get("offerings", []) if item.get("id") == offering_id),
+            None,
+        )
+        return (
+            ("offering", offering_id),
+            (offering or {}).get("title") or "درس بدون عنوان",
+            (offering or {}).get("term", ""),
+            "",
+        )
+
+    task_ref = target.get("task_ref")
+    if isinstance(task_ref, dict):
+        task = next(
+            (
+                item for item in study.get("platform_assignments", [])
+                if _task_key(item.get("ref", {})) == _task_key(task_ref)
+            ),
+            None,
+        )
+        class_item = next(
+            (
+                item for item in study.get("classes", [])
+                if item.get("ref", {}).get("connection_id") == task_ref.get("connection_id")
+                and item.get("ref", {}).get("class_id") == task_ref.get("class_id")
+            ),
+            None,
+        )
+        offering = (class_item or {}).get("offering") or {}
+        if not offering.get("id"):
+            offering = next(
+                (
+                    item for item in study.get("offerings", [])
+                    if any(
+                        ref.get("connection_id") == task_ref.get("connection_id")
+                        and ref.get("class_id") == task_ref.get("class_id")
+                        for ref in item.get("class_refs", [])
+                    )
+                ),
+                {},
+            )
+        tracking = (class_item or {}).get("tracking") or {}
+        course_name = (
+            offering.get("title") or (class_item or {}).get("title")
+            or (task or {}).get("course_title") or "درس بدون عنوان"
+        )
+        term = offering.get("term") or tracking.get("term") or ""
+        class_key = (
+            task_ref.get("connection_id"), task_ref.get("class_id")
+        )
+        key = (
+            ("offering", offering["id"])
+            if offering.get("id") else ("class", *class_key)
+        )
+        task_name = (task or {}).get("title") or "تکلیف انتخاب‌شده"
+        return key, course_name, term, task_name
+
+    fallback = binding.get("id") or binding.get("resource_id") or "unknown"
+    return ("unknown", fallback), "درس نامشخص", "", ""
+
+
+def _resource_course_groups(study: dict) -> list[dict]:
+    groups: dict[tuple, dict] = {}
+    for entry in _resource_catalog(study):
+        for binding in entry["bindings"]:
+            key, course_name, term, _ = _resource_course_target(binding, study)
+            group = groups.setdefault(
+                key,
+                {"title": course_name, "term": term, "resources": {}},
+            )
+            resource_id = entry["resource"].get("id")
+            course_resource = group["resources"].setdefault(
+                resource_id,
+                {
+                    "resource": entry["resource"],
+                    "captures": entry["captures"],
+                    "bindings": [],
+                },
+            )
+            binding_id = binding.get("id")
+            if all(item.get("id") != binding_id for item in course_resource["bindings"]):
+                course_resource["bindings"].append(binding)
+
+    result = []
+    for group in groups.values():
+        group["resources"] = sorted(
+            group["resources"].values(),
+            key=lambda item: (item["resource"].get("title") or "").casefold(),
+        )
+        result.append(group)
+    return sorted(result, key=lambda item: item["title"].casefold())
+
+
+def resource_panel(study: dict) -> str:
+    """Group every active resource under the course it is attached to."""
+    groups = _resource_course_groups(study)
+    resource_count = len(_resource_catalog(study))
+    group_html = []
+    for group in groups:
+        items = []
+        for entry in group["resources"]:
+            resource = entry["resource"]
+            kind, family, mark = _resource_kind(resource)
+            bindings = sorted(
+                entry["bindings"],
+                key=lambda item: _resource_course_target(item, study)[3].casefold(),
+            )
+            targets = []
+            for binding in bindings:
+                _, _, _, task_name = _resource_course_target(binding, study)
+                target_label = (
+                    "تکلیف: {}".format(task_name) if task_name else "کل درس"
+                )
+                targets.append(
+                    "<span class='resource-course-target'>{} · {}</span>".format(
+                        esc(target_label), _resource_scope(binding.get("extent") or {})
+                    )
+                )
+            capture_count = len(entry["captures"])
+            extra = "{} · نسخهٔ {} · {} نسخهٔ ذخیره‌شده".format(
+                RESOURCE_KIND_LABELS.get(kind, "منبع"),
+                resource.get("revision", 1), capture_count,
+            )
+            items.append(
+                "<article class='resource-course-item'><span class='resource-mark {}'>{}</span>"
+                "<div class='resource-course-item-main'><h4>{}</h4><p>{}</p>"
+                "<div class='resource-course-targets'>{}</div></div>"
+                "<a href='resources.html#resource-{}'>جزئیات</a></article>".format(
+                    esc(family), esc(mark), esc(resource.get("title") or "منبع بدون عنوان"),
+                    esc(extra), "".join(targets), esc(resource.get("id", "")),
+                )
+            )
+        term = (
+            "<span>{}</span>".format(esc(group["term"]))
+            if group.get("term") else "<span>منابع متصل</span>"
+        )
+        group_html.append(
+            "<section class='resource-course-group'><header class='resource-course-head'>"
+            "<span class='resource-course-icon' aria-hidden='true'>▤</span>"
+            "<div class='resource-course-name'><h3>{}</h3>{}</div>"
+            "<span class='resource-course-count'>{} منبع</span></header>"
+            "<div class='resource-course-list'>{}</div></section>".format(
+                esc(group["title"]), term, len(group["resources"]), "".join(items)
+            )
+        )
+
+    contents = (
+        "<div class='resource-course-groups'>{}</div>".format("".join(group_html))
+        if group_html else (
+            "<div class='resource-course-empty'><strong>هنوز منبعی به درسی وصل نشده</strong>"
+            "<p>فایل یا لینک را همراه نام درس بفرست تا پس از اتصال، اینجا زیر همان درس دیده شود.</p></div>"
+        )
+    )
+    return (
+        "<section class='platform-panel resource-course-panel' id='course-resources'>"
+        "<div class='resource-course-panel-head'><div><p class='eyebrow'>کتابخانهٔ درس</p>"
+        "<h2>منابع هر درس</h2><p>منابع به تفکیک درس، همراه با تکلیف و محدودهٔ مرتبط.</p></div>"
+        "<div class='resource-course-panel-actions'><span class='count'>{} منبع · {} درس</span>"
+        "<a href='resources.html'>کتابخانهٔ کامل <span aria-hidden='true'>←</span></a></div></div>"
+        "{}</section>"
+    ).format(resource_count, len(groups), contents)
+
+
+def resource_library_page(study: dict, dashboard_name: str = "index.html") -> str:
+    """Render a searchable, standalone view of active course resources."""
+    entries = _resource_catalog(study)
+    capture_count = sum(len(item["captures"]) for item in entries)
+    target_count = len({
+        repr(binding.get("target"))
+        for item in entries for binding in item["bindings"]
+    })
+    cards = []
+    for entry in entries:
+        resource = entry["resource"]
+        kind, family, mark = _resource_kind(resource)
+        kind_label = RESOURCE_KIND_LABELS.get(kind, "منبع تکمیلی")
+        provenance = RESOURCE_PROVENANCE_LABELS.get(
+            resource.get("provenance"), "منبع تکمیلی"
+        )
+        origin, href = _resource_location(resource)
+        bindings = sorted(
+            entry["bindings"], key=lambda item: _resource_target_label(item, study).casefold()
+        )
+        binding_html = []
+        for binding in bindings:
+            binding_html.append(
+                "<div class='resource-binding'><span class='resource-binding-icon' aria-hidden='true'>↳</span>"
+                "<span><b>{}</b><small>{}</small></span></div>".format(
+                    esc(_resource_target_label(binding, study)),
+                    _resource_scope(binding.get("extent") or {}),
+                )
+            )
+        captures = sorted(
+            entry["captures"], key=lambda item: item.get("captured_at", ""), reverse=True
+        )
+        if captures:
+            latest = captures[0]
+            snapshot = (
+                "<span>نسخهٔ ذخیره‌شده: {} مورد · آخرین ثبت: "
+                "<time data-local-date='{}'>{}</time></span>".format(
+                    len(captures), esc(latest.get("captured_at", "")),
+                    esc(latest.get("captured_at", "")),
+                )
+            )
+        else:
+            snapshot = "<span>هنوز نسخه‌ای از محتوا ذخیره نشده</span>"
+        open_link = (
+            "<a href='{}' target='_blank' rel='noreferrer'>باز کردن منبع "
+            "<span aria-hidden='true'>↗</span></a>".format(esc(href))
+            if href else "<span>مرجع پوشه‌ای</span>"
+        )
+        search_text = " ".join([
+            resource.get("title", ""), origin, kind_label, provenance,
+            *[_resource_target_label(binding, study) for binding in bindings],
+        ])
+        cards.append(
+            "<article id='resource-{}' class='resource-card' data-resource-kind='{}' data-resource-search='{}'>"
+            "<div class='resource-card-top'><span class='resource-mark {}'>{}</span>"
+            "<div class='resource-classification'><strong>{}</strong><span>{}</span></div>"
+            "<span class='resource-version'>نسخهٔ {}</span></div>"
+            "<h3>{}</h3><p class='resource-origin'>{}</p>"
+            "<div class='resource-binding-list'>{}</div>"
+            "<div class='resource-card-foot'>{}{}</div></article>".format(
+                esc(resource.get("id", "")), esc(family), esc(search_text.lower()),
+                esc(family), esc(mark),
+                esc(kind_label), esc(provenance), esc(resource.get("revision", 1)),
+                esc(resource.get("title") or "منبع بدون عنوان"), esc(origin),
+                "".join(binding_html), snapshot, open_link,
+            )
+        )
+
+    if cards:
+        content = "".join(cards)
+        controls = (
+            "<div class='resource-controls'><label class='resource-search'>"
+            "<span class='visually-hidden'>جست‌وجو در منابع</span>"
+            "<input id='resource-search' data-resource-search type='search' "
+            "placeholder='نام منبع، درس یا نوع فایل' autocomplete='off'></label>"
+            "<div class='resource-filters' role='group' aria-label='فیلتر منابع'>"
+            "<button type='button' data-resource-filter='all' aria-pressed='true'>همه</button>"
+            "<button type='button' data-resource-filter='file' aria-pressed='false'>فایل‌ها</button>"
+            "<button type='button' data-resource-filter='web' aria-pressed='false'>صفحه‌های وب</button>"
+            "<button type='button' data-resource-filter='video' aria-pressed='false'>ویدئوها</button>"
+            "<button type='button' data-resource-filter='folder' aria-pressed='false'>پوشه‌ها</button>"
+            "<span class='resource-result-count' id='resource-count'>{} منبع</span></div></div>"
+        ).format(len(entries))
+        empty_match = "<p class='resource-no-matches' id='resource-no-matches' hidden>منبعی با این جست‌وجو پیدا نشد.</p>"
+    else:
+        content = (
+            "<div class='resource-empty'><span class='resource-empty-icon' aria-hidden='true'>＋</span>"
+            "<strong>هنوز منبعی به درس‌ها وصل نشده</strong>"
+            "<p>لینک یا فایل منبع را در گفت‌وگو با Codex بفرست و نام دقیق درس یا تکلیف را هم بنویس؛ "
+            "بعد از اتصال، اینجا با نوع و بخش‌های مرتبطش دیده می‌شود.</p></div>"
+        )
+        controls = ""
+        empty_match = ""
+
+    return (
+        "<!doctype html><html lang='fa' dir='rtl'><head><meta charset='utf-8'>"
+        "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+        "<title>کتابخانهٔ منابع درسی</title>"
+        "<style>{fonts}\n{css}\n{revision_css}\n{resource_css}</style></head><body>"
+        "<main class='wrap resource-page'><a class='resource-back' href='{dashboard}'>"
+        "<span aria-hidden='true'>→</span> بازگشت به داشبورد</a>"
+        "<header class='resource-hero'><div class='resource-hero-copy'>"
+        "<p class='eyebrow'>آرشیو شخصی نیم‌سال</p><h1>کتابخانهٔ منابع</h1>"
+        "<p>همهٔ فایل‌ها، پیوندها و یادداشت‌های مرتبط با درس‌ها را یک‌جا ببین؛ "
+        "بخش مرتبط با هر درس و نسخه‌های ثبت‌شده هم کنار آن مشخص است.</p>"
+        "<p class='resource-howto'><b>منبع تازه داری؟</b> لینک یا فایل را در گفت‌وگو بفرست و نام درس را بنویس.</p>"
+        "</div><div class='resource-hero-art' aria-hidden='true'><svg viewBox='0 0 180 150' fill='none'>"
+        "<path d='M32 30c21-8 39-5 57 7v88c-18-12-36-15-57-7V30Z' fill='#fff' stroke='#8dbdaf' stroke-width='3'/>"
+        "<path d='M146 30c-21-8-39-5-57 7v88c18-12 36-15 57-7V30Z' fill='#f4fbf8' stroke='#8dbdaf' stroke-width='3'/>"
+        "<path d='M47 51c12-3 22-2 32 3M47 67c12-3 22-2 32 3M47 83c12-3 22-2 32 3M133 51c-12-3-22-2-32 3M133 67c-12-3-22-2-32 3M133 83c-12-3-22-2-32 3' stroke='#b7d6cd' stroke-width='3' stroke-linecap='round'/>"
+        "<circle cx='143' cy='31' r='18' fill='#176d60'/><path d='M143 22v18M134 31h18' stroke='#fff' stroke-width='3' stroke-linecap='round'/>"
+        "<circle cx='31' cy='111' r='7' fill='#d9a15d'/><circle cx='155' cy='116' r='5' fill='#93c6b7'/>"
+        "</svg></div></header>"
+        "<section class='resource-stats' aria-label='خلاصهٔ کتابخانه'>"
+        "<article class='resource-stat'><span class='resource-stat-icon' aria-hidden='true'>▤</span>"
+        "<div><strong>{resource_count}</strong><span>منبع فعال</span></div></article>"
+        "<article class='resource-stat'><span class='resource-stat-icon' aria-hidden='true'>⌁</span>"
+        "<div><strong>{target_count}</strong><span>اتصال به درس یا تکلیف</span></div></article>"
+        "<article class='resource-stat'><span class='resource-stat-icon' aria-hidden='true'>✓</span>"
+        "<div><strong>{capture_count}</strong><span>نسخهٔ ذخیره‌شده</span></div></article></section>"
+        "<section class='resource-shelf' aria-labelledby='resource-shelf-title'>"
+        "<div class='resource-shelf-head'><div><h2 id='resource-shelf-title'>منابع متصل</h2>"
+        "<p>فقط منابعی نمایش داده می‌شوند که به یک درس یا تکلیف وصل شده‌اند.</p></div></div>"
+        "{controls}<div class='resource-grid'>{content}</div>{empty_match}</section>"
+        "<p class='resource-footnote'><span aria-hidden='true'>ⓘ</span><span><b>یادآوری:</b> "
+        "ثبت نسخه یعنی نگه‌داری یک کپی برای کار؛ به معنی ثبت استفاده یا مطالعهٔ آن نیست.</span></p>"
+        "<footer class='foot'><span>کتابخانهٔ منابع تکمیلی · اطلاعات از داده‌های محلی درس‌ها خوانده می‌شود</span></footer>"
+        "</main><script>{js}</script></body></html>"
+    ).format(
+        fonts=font_css(), css=CSS, revision_css=REVISION_CSS, resource_css=RESOURCE_CSS,
+        dashboard=esc(dashboard_name), resource_count=len(entries), target_count=target_count,
+        capture_count=capture_count, controls=controls, content=content,
+        empty_match=empty_match, js=JS + RESOURCE_JS,
+    )
+
+
+RESOURCE_JS = """
+function setupResourceFilters(){
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.resource-card'));
+  var buttons = Array.prototype.slice.call(document.querySelectorAll('[data-resource-filter]'));
+  var search = document.getElementById('resource-search');
+  var counter = document.getElementById('resource-count');
+  var empty = document.getElementById('resource-no-matches');
+  var selected = 'all';
+  function apply(){
+    var query = search ? search.value.trim().toLocaleLowerCase('fa') : '';
+    var shown = 0;
+    cards.forEach(function(card){
+      var family = card.getAttribute('data-resource-kind');
+      var haystack = (card.getAttribute('data-resource-search') || '').toLocaleLowerCase('fa');
+      var pass = (!query || haystack.indexOf(query) >= 0)
+        && (selected === 'all' || selected === family);
+      card.hidden = !pass;
+      if(pass) shown++;
+    });
+    if(counter) counter.textContent = new Intl.NumberFormat('fa-IR').format(shown)+' منبع';
+    if(empty) empty.hidden = shown !== 0;
+  }
+  buttons.forEach(function(button){
+    button.addEventListener('click', function(){
+      selected = button.getAttribute('data-resource-filter');
+      buttons.forEach(function(other){ other.setAttribute('aria-pressed', other === button ? 'true' : 'false'); });
+      apply();
+    });
+  });
+  if(search) search.addEventListener('input', apply);
+  apply();
+}
+document.addEventListener('DOMContentLoaded', setupResourceFilters);
+"""
+
+
 # ---- page ----------------------------------------------------------------
 
 
 def build(user: dict, assignments: list, gap: dict, now: datetime, now_epoch: int,
-          materials: dict | None = None) -> str:
+          materials: dict | None = None, work_items: list[dict] | None = None,
+          has_course_data: bool = True, study_view: dict | None = None) -> str:
     materials = materials or {}
+    work_items = work_items or []
+    study_view = study_view or {}
+    resource_titles = {item.get("id"): item for item in study_view.get("resources", [])}
+    platform_assignments = study_view.get("platform_assignments", [])
     name = user.get("fullname") or ""
-    initials = "".join(part[0] for part in name.split()[:2]) or "؟"
+    dashboard_study = {
+        **study_view,
+        "platform_assignments": platform_assignments + _legacy_platform_assignments(
+            assignments, study_view, user.get("refreshed", "")
+        ),
+    }
 
     unknown = [a for a in assignments if a.bucket == "unknown"]
 
     banners = ""
-    if unknown:
+    if has_course_data and unknown:
         banners += (
             "<div class='note'><b>{} مورد ناشناخته.</b> پارسر وضعیتشان را نفهمید و "
             "«انجام‌شده» حسابشان نکرده — عمداً. فایل‌های خام در "
@@ -694,23 +1827,32 @@ def build(user: dict, assignments: list, gap: dict, now: datetime, now_epoch: in
                 len(unknown)
             )
         )
-    banners += (
-        "<div class='note'>درس‌هایی که «موردی پیدا نشد» دارند، در لحظهٔ آخرین بررسی "
-        "تکلیفی نداشتند — نه اینکه ثابت شده باشد تا آخر ترم تکلیفی نخواهند داشت. "
-        "هر چند هفته یک‌بار <code>cwtrack fetch</code> را دوباره اجرا کن.</div>"
-    )
+    if has_course_data:
+        banners += (
+            "<div class='note'>درس‌هایی که «موردی پیدا نشد» دارند، در لحظهٔ آخرین بررسی "
+            "تکلیفی نداشتند — نه اینکه ثابت شده باشد تا آخر ترم تکلیفی نخواهند داشت. "
+            "هر چند هفته یک‌بار <code>cwtrack fetch</code> را دوباره اجرا کن.</div>"
+        )
+    else:
+        banners += "<div class='note'>اطلاعات درس از سامانه در دسترس نیست</div>"
 
     if assignments:
         courses = "".join(course_card(c, materials) for c in gap["per_course"])
         body = (
             "{banners}"
+            "{platforms}"
+            "{resources}"
+            "{work_panel}"
             "{actions}"
             "{timeline}"
             "{tiles}"
-            "<h2 class='sec'>درس‌ها <span class='count'>{nc} درس</span></h2>"
+            "<h2 class='sec' id='course-list'>درس‌ها <span class='count'>{nc} درس</span></h2>"
             "{courses}"
         ).format(
             banners=banners,
+            platforms=platform_panel(dashboard_study, work_items),
+            resources=resource_panel(dashboard_study),
+            work_panel=work_panel(work_items, resource_titles),
             actions=action_panel(gap),
             timeline=timeline(
                 [a for a in assignments if a.bucket in ("overdue", "closed", "draft", "open")],
@@ -720,23 +1862,45 @@ def build(user: dict, assignments: list, gap: dict, now: datetime, now_epoch: in
             nc=len(gap["per_course"]),
             courses=courses,
         )
-    else:
+    elif platform_assignments or study_view.get("classes") or study_view.get("connections"):
         body = (
+            banners
+            + platform_panel(dashboard_study, work_items)
+            + resource_panel(dashboard_study)
+            + work_panel(work_items, resource_titles)
+        )
+    else:
+        body = banners + resource_panel(dashboard_study) + work_panel(work_items, resource_titles) + (
             "<div class='empty'><div class='big'>▤</div>"
             "<div>هنوز چیزی جمع نشده. اولین بار:</div>"
             "<code>cwtrack fetch</code></div>"
         )
 
+    nav_items = []
+    if platform_assignments or assignments or study_view.get("classes") or study_view.get("connections"):
+        nav_items.append("<a href='#platform-tasks'>تکالیف سامانه‌ها</a>")
+    if work_items:
+        nav_items.append("<a href='#work-items'>پیشرفت پاسخ</a>")
+    if assignments:
+        nav_items.append("<a href='#course-list'>درس‌های شارپ</a>")
+    nav_items.append(
+        "<a class='resource-section-nav' href='#course-resources'>منابع هر درس</a>"
+    )
+    navigation = (
+        "<nav class='section-nav' aria-label='پرش به بخش'>" + "".join(nav_items) + "</nav>"
+        if nav_items else ""
+    )
+
     return (
         "<!doctype html>\n<html lang='fa' dir='rtl'><head><meta charset='utf-8'>"
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         "<title>وضعیت تکالیف{who}</title>"
-        "<style>{fonts}\n{css}</style></head><body><div class='wrap'>"
-        "<header class='top'><div class='id'>{ini}</div><div>"
-        "<h1>وضعیت تکالیف</h1>"
-        "<div class='meta'>{name} · <b>{username}</b> · به‌روزرسانی {refreshed} "
+        "<style>{fonts}\n{css}\n{revision_css}\n{resource_css}</style></head><body><div class='wrap'>"
+        "<header class='top'><div class='id' aria-hidden='true'>✓</div><div>"
+        "<p class='eyebrow'>مرکز پیگیری نیم‌سال</p><h1>وضعیت تکالیف</h1>"
+        "<div class='meta'>{name} · <b>{username}</b> · آخرین به‌روزرسانی {refreshed} "
         "· ساعت سایت <span id='clock' class='num'></span></div>"
-        "</div></header>"
+        "</div></header>{navigation}"
         "{body}"
         "<footer class='foot'>ساخته‌شده با مهارت <code>sharif-cw</code>"
         "<span>· فقط خواندنی: هیچ چیزی به سایت ارسال نمی‌شود</span></footer>"
@@ -745,10 +1909,21 @@ def build(user: dict, assignments: list, gap: dict, now: datetime, now_epoch: in
         who=" — {}".format(esc(name)) if name else "",
         fonts=font_css(),
         css=CSS,
-        ini=esc(initials),
+        revision_css=REVISION_CSS,
+        resource_css=RESOURCE_CSS,
         name=esc(name) or "—",
         username=esc(user.get("username") or "—"),
         refreshed=esc(user.get("refreshed") or "—"),
+        navigation=navigation,
         body=body,
         js=JS,
+    )
+
+
+def _extent_text(extent: dict) -> str:
+    if not isinstance(extent, dict) or not extent:
+        return "نامشخص"
+    return "، ".join(
+        "{} {}".format(esc(key), esc(value if isinstance(value, str) else str(value)))
+        for key, value in extent.items()
     )

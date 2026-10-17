@@ -1,0 +1,355 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from cwtrack.platforms.cw import CWAdapter
+from cwtrack.platforms.quera import QueraAdapter
+
+
+class FakeCwClient:
+    def __init__(self, base):
+        self.base = base
+        self.cookies = {"MoodleSession": "private-cookie"}
+
+    def import_cookies(self, cookies):
+        self.cookies = dict(cookies)
+
+    def export_cookies(self):
+        return dict(self.cookies)
+
+    def logged_in(self):
+        return True
+
+    def get(self, path, params=None):
+        if path == "/my/courses.php":
+            return '<a href="/course/view.php?id=101">Algorithms</a>'
+        if path == "/mod/assign/index.php" and params == {"id": 101}:
+            fixture = Path(__file__).parent / "fixtures" / "course_90000_assign.html"
+            return fixture.read_text(encoding="utf-8")
+        raise AssertionError((path, params))
+
+
+def test_cw_adapter_observes_classes_and_assignments_with_a_private_session(tmp_path):
+    adapter = CWAdapter(
+        {
+            "id": "cw-account",
+            "platform": "cw",
+            "origin": "https://cw.sharif.ir",
+        },
+        client_factory=FakeCwClient,
+        challenge_root=tmp_path,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+
+    classes = adapter.observe(
+        {"scope": "classes"},
+        {"credentials": {"username": "student", "password": "private"}},
+    )
+    class_ref = classes["observation"]["nodes"][0]["ref"]
+    assignments = adapter.observe(
+        {"scope": "assignments", "class_ref": class_ref},
+        {
+            "credentials": {"username": "student", "password": "private"},
+            "session": classes["private_state"],
+        },
+    )
+
+    assert classes["status"] == "ok"
+    assert classes["observation"]["coverage"] == "complete"
+    assert class_ref == {"connection_id": "cw-account", "class_id": "101"}
+    assert classes["private_state"]["cookies"] == {"MoodleSession": "private-cookie"}
+    assert assignments["status"] == "ok"
+    assert assignments["observation"]["coverage"] == "complete"
+    assert assignments["observation"]["nodes"][0]["ref"] == {
+        "connection_id": "cw-account",
+        "class_id": "101",
+        "assignment_id": "90001",
+    }
+    assert assignments["observation"]["nodes"][0]["submission"]["state"]
+
+
+class FakeQueraClient:
+    def __init__(self, base):
+        self.base = base
+        self.cookies = [{"name": "csrf", "value": "private"}]
+        self.calls = []
+
+    def import_cookies(self, cookies):
+        self.cookies = list(cookies)
+
+    def export_cookies(self):
+        return list(self.cookies)
+
+    def get(self, path):
+        self.calls.append(("get", path))
+        return "https://quera.org/accounts/login", "<html>login</html>"
+
+    def post_json(self, path, payload):
+        self.calls.append(("post", path, payload))
+        return {"next_step": "otp", "user_wait": 45}
+
+
+def test_quera_login_returns_a_resumable_otp_challenge_without_secrets(tmp_path):
+    clients = []
+
+    def make_client(base):
+        client = FakeQueraClient(base)
+        clients.append(client)
+        return client
+
+    adapter = QueraAdapter(
+        {
+            "id": "quera-account",
+            "platform": "quera",
+            "origin": "https://quera.org",
+        },
+        client_factory=make_client,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+
+    result = adapter.observe(
+        {"scope": "classes"},
+        {"credentials": {"username": "student@example.test", "password": "private"}},
+    )
+
+    assert result["status"] == "challenge_required"
+    assert result["challenge"]["kind"] == "otp"
+    assert result["challenge"]["display"]["user_wait"] == 45
+    assert result["private_state"]["credentials"]["password"] == "private"
+    assert "password" not in repr(result["challenge"])
+    assert clients[0].calls[-1][1] == "/accounts/api/login/"
+    assert clients[0].calls[-1][2] == {
+        "identifier": "student@example.test",
+        "captcha_token": "",
+        "preferred_process": "password",
+    }
+
+
+def test_quera_recaptcha_is_reported_as_interactive_not_readable(tmp_path):
+    class CaptchaClient(FakeQueraClient):
+        def post_json(self, path, payload):
+            return {
+                "_http_status": 400,
+                "recaptcha_site_key": "public-key",
+                "recaptcha_domain": "quera.org",
+            }
+
+    adapter = QueraAdapter(
+        {
+            "id": "quera-account",
+            "platform": "quera",
+            "origin": "https://quera.org",
+        },
+        client_factory=CaptchaClient,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+
+    result = adapter.observe(
+        {"scope": "classes"},
+        {"credentials": {"username": "student@example.test", "password": "private"}},
+    )
+
+    assert result["status"] == "challenge_required"
+    assert result["challenge"]["kind"] == "interactive"
+    assert "image" not in result["challenge"]["display"]
+    assert result["private_state"]["request"] == {"scope": "classes"}
+
+
+def test_quera_class_links_are_scoped_to_the_authenticated_connection():
+    class AuthenticatedClient:
+        def __init__(self, base):
+            self.base = base
+
+        def import_cookies(self, cookies):
+            pass
+
+        def export_cookies(self):
+            return [{"name": "session", "value": "private"}]
+
+        def get(self, path):
+            assert path == "/course/"
+            return "https://quera.org/course/", (
+                '<script id="__NEXT_DATA__">'
+                '{"props":{"pageProps":{"globalServerValues":'
+                '{"currentUser":{"is_authenticated":true}}}}}</script>'
+                '<a href="/course/db101/">'
+                '<style>.css-title{padding:0;}</style>'
+                '<span>پایگاه داده</span>'
+                '<script>client-side metadata</script>'
+                '</a>'
+            )
+
+    adapter = QueraAdapter(
+        {"id": "quera-account", "platform": "quera", "origin": "https://quera.org"},
+        client_factory=AuthenticatedClient,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+
+    result = adapter.observe(
+        {"scope": "classes"},
+        {"session": {"cookies": [{"name": "session", "value": "private"}]}},
+    )
+
+    assert result["status"] == "ok"
+    assert result["observation"]["coverage"] == "complete"
+    assert result["observation"]["nodes"] == [{
+        "kind": "class",
+        "ref": {"connection_id": "quera-account", "class_id": "db101"},
+        "title": "پایگاه داده",
+        "url": "https://quera.org/course/db101/",
+    }]
+
+
+def test_quera_reads_assignments_from_the_authenticated_course_page():
+    class AuthenticatedClient:
+        def __init__(self, base):
+            self.base = base
+            self.calls = []
+
+        def import_cookies(self, cookies):
+            pass
+
+        def export_cookies(self):
+            return [{"name": "session", "value": "private"}]
+
+        def get(self, path):
+            self.calls.append(path)
+            if path == "/course/":
+                return "https://quera.org/course/", (
+                    '<script id="__NEXT_DATA__">'
+                    '{"props":{"pageProps":{"globalServerValues":'
+                    '{"currentUser":{"is_authenticated":true}}}}}</script>'
+                )
+            assert path == "/course/db101/"
+            return "https://quera.org/course/db101/", (
+                '<script id="__NEXT_DATA__">'
+                '{"props":{"pageProps":{"globalServerValues":'
+                '{"currentUser":{"is_authenticated":true}},"course":'
+                '{"id":"db101","name":"پایگاه داده",'
+                '"assignments":[{"pk":781,"name":"تمرین اول",'
+                '"start_time":"2026-10-01T00:00:00Z",'
+                '"finish_time":"2026-10-20T20:30:00Z",'
+                '"problem_count":2,"state":"PUBLISHED"}]}}}}</script>'
+            )
+
+    clients = []
+
+    def make_client(base):
+        client = AuthenticatedClient(base)
+        clients.append(client)
+        return client
+
+    adapter = QueraAdapter(
+        {"id": "quera-account", "platform": "quera", "origin": "https://quera.org"},
+        client_factory=make_client,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+
+    result = adapter.observe(
+        {
+            "scope": "assignments",
+            "class_ref": {"connection_id": "quera-account", "class_id": "db101"},
+        },
+        {"session": {"cookies": [{"name": "session", "value": "private"}]}},
+    )
+
+    assert result["status"] == "ok", result
+    assert result["observation"]["coverage"] == "complete"
+    assert clients[0].calls == ["/course/", "/course/db101/"]
+    assert result["observation"]["nodes"] == [{
+        "kind": "assignment",
+        "ref": {
+            "connection_id": "quera-account",
+            "class_id": "db101",
+            "assignment_id": "781",
+        },
+        "title": "تمرین اول",
+        "url": "https://quera.org/course/assignments/781/problems",
+        "submission": {"state": "unknown", "raw": ""},
+        "evaluation": {"state": "unknown", "grade": None},
+        "deadlines": [{
+            "kind": "regular",
+            "at": "2026-10-20T20:30:00Z",
+            "raw": "2026-10-20T20:30:00Z",
+        }],
+    }]
+
+
+def test_quera_assignment_list_count_mismatch_stays_incomplete():
+    class AuthenticatedClient:
+        def __init__(self, base):
+            self.base = base
+
+        def import_cookies(self, cookies):
+            pass
+
+        def export_cookies(self):
+            return []
+
+        def get(self, path):
+            return "https://quera.org/course/db101/", (
+                '<script id="__NEXT_DATA__">'
+                '{"props":{"pageProps":{"globalServerValues":'
+                '{"currentUser":{"is_authenticated":true}},"course":'
+                '{"id":"db101","assignment_count":2,"assignments":[]}}}}</script>'
+            )
+
+    adapter = QueraAdapter(
+        {"id": "quera-account", "platform": "quera", "origin": "https://quera.org"},
+        client_factory=AuthenticatedClient,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+
+    result = adapter.observe(
+        {
+            "scope": "assignments",
+            "class_ref": {"connection_id": "quera-account", "class_id": "db101"},
+        },
+        {"session": {"cookies": []}},
+    )
+
+    assert result["status"] == "unavailable"
+    assert result["observation"]["coverage"] == "incomplete"
+    assert result["observation"]["nodes"] == []
+
+
+def test_quera_assignment_detail_does_not_claim_to_have_received_a_prompt():
+    class AuthenticatedClient:
+        def __init__(self, base):
+            self.base = base
+
+        def import_cookies(self, cookies):
+            pass
+
+        def export_cookies(self):
+            return []
+
+        def get(self, path):
+            return "https://quera.org/course/", (
+                '<script id="__NEXT_DATA__">'
+                '{"props":{"pageProps":{"globalServerValues":'
+                '{"currentUser":{"is_authenticated":true}}}}}</script>'
+            )
+
+    adapter = QueraAdapter(
+        {"id": "quera-account", "platform": "quera", "origin": "https://quera.org"},
+        client_factory=AuthenticatedClient,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+
+    result = adapter.observe(
+        {
+            "scope": "assignment_detail",
+            "task_ref": {
+                "connection_id": "quera-account",
+                "class_id": "db101",
+                "assignment_id": "781",
+            },
+            "assignment": {"title": "تمرین اول"},
+        },
+        {"session": {"cookies": []}},
+    )
+
+    assert result["status"] == "unavailable"
+    assert result["observation"]["scope"] == "assignment_detail"
+    assert result["observation"]["coverage"] == "incomplete"
