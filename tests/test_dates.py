@@ -18,6 +18,8 @@ import pytest
 
 from cwtrack import dates
 
+TEHRAN_TZ = timezone(timedelta(hours=3, minutes=30))
+
 
 class TestJalaliConversion:
     """Properties, not examples. A single anchor would have passed the buggy
@@ -125,7 +127,7 @@ class TestParseDue:
     def test_relative_word_with_persian_month_and_meridiem(self, now):
         text, epoch = dates.parse_due("Tomorrow, 14 مهر, 7:30 صبح", now)
         assert text == "Tomorrow, 14 مهر, 7:30 صبح"
-        assert epoch == int(datetime(2026, 10, 6, 7, 30).timestamp())
+        assert epoch == int(datetime(2026, 10, 6, 7, 30, tzinfo=TEHRAN_TZ).timestamp())
 
     def test_jalali_digits_with_numeric_separators(self, now):
         _, epoch = dates.parse_due("۱۴۰۴/۰۸/۱۴، ۲۳:۵۹", now)
@@ -134,11 +136,11 @@ class TestParseDue:
     def test_jalali_month_name_with_explicit_year(self, now):
         _, epoch = dates.parse_due("شنبه ۲۱ مهر ۱۴۰۴، ۲۳:۵۹", now)
         from datetime import datetime as dt
-        assert dt.fromtimestamp(epoch).strftime("%Y-%m-%d") == "2025-10-13"
+        assert dt.fromtimestamp(epoch, tz=TEHRAN_TZ).strftime("%Y-%m-%d") == "2025-10-13"
 
     def test_gregorian_passthrough(self, now):
         _, epoch = dates.parse_due("2026-11-20, 23:59", now)
-        assert epoch == int(datetime(2026, 11, 20, 23, 59).timestamp())
+        assert epoch == int(datetime(2026, 11, 20, 23, 59, tzinfo=TEHRAN_TZ).timestamp())
 
     @pytest.mark.parametrize("empty", ["", "-", "—", "–", None])
     def test_empty_and_placeholder_cells(self, now, empty):
@@ -150,7 +152,7 @@ class TestParseDue:
         """A bare day+month must not default to some arbitrary year."""
         _, epoch = dates.parse_due("14 مهر", now)
         assert epoch is not None
-        assert date.fromtimestamp(epoch).year in (2025, 2026)
+        assert datetime.fromtimestamp(epoch, tz=TEHRAN_TZ).date().year in (2025, 2026)
 
     def test_unparseable_text_yields_no_epoch(self, now):
         """Guessing here would mislabel a deadline, so it must return None."""

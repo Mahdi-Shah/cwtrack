@@ -47,7 +47,8 @@ def make_captcha(path: Path, text: str, seed: int = 0, difficulty: float = 1.0):
     for y in range(H):
         d.line([(0, y), (W, y)], fill=max(0, min(255, 240 + random.randint(-5, 5))))
 
-    font = ImageFont.truetype("arial.ttf", 27)
+    font_path = Path(__file__).resolve().parents[1] / "src" / "cwtrack" / "fonts" / "Vazirmatn-Regular.ttf"
+    font = ImageFont.truetype(str(font_path), 27)
     d.text((13, 5), text, font=font, fill=25)
 
     for _ in range(max(1, int(2 * difficulty))):

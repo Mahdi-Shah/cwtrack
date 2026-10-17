@@ -10,6 +10,8 @@ of the file it was handed — a fake byte string would be rejected before the in
 code ran, and the test would pass for the wrong reason.
 """
 
+from __future__ import annotations
+
 import builtins
 from pathlib import Path
 
