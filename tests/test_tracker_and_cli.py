@@ -296,7 +296,10 @@ class TestEntryPoint:
         """The packaging must not point the console script at the wrong function."""
         import pathlib
 
-        import tomllib
+        try:
+            import tomllib
+        except ImportError:  # Python 3.9 and 3.10
+            import tomli as tomllib
 
         pyproject = pathlib.Path(__file__).resolve().parent.parent / "pyproject.toml"
         scripts = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["scripts"]

@@ -23,7 +23,11 @@ import re
 import subprocess
 
 import pytest
-import tomllib
+
+try:
+    import tomllib
+except ImportError:  # Python 3.9 and 3.10
+    import tomli as tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / ".github" / "workflows"

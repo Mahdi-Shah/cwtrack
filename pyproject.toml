@@ -5,12 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cwtrack"
 version = "0.1.0"
-description = "Track your own assignments, deadlines and materials on cw.sharif.ir"
+description = "Track coursework, durable assignment work, and course resources"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [{ name = "cwtrack contributors" }]
-keywords = ["moodle", "assignments", "sharif", "jalali", "student", "tracker"]
+keywords = ["moodle", "quera", "assignments", "sharif", "jalali", "student", "tracker"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
@@ -47,6 +47,8 @@ dev = [
     # Only for tests/test_repo.py, which reads the workflow YAML to check it.
     # Kept in dev rather than the main list: nothing the tool runs needs it.
     "pyyaml>=6.0",
+    # TOML parsing is in the standard library starting with Python 3.11.
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.urls]

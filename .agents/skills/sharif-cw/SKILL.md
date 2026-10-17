@@ -1,6 +1,6 @@
 ---
 name: sharif-cw
-description: 'Tracks the user''s own courses on the Sharif courseware site at cw.sharif.ir: fetches assignments, submission status, deadlines and grades into a local store, keeps each course''s material folder indexed, renders a single-page dashboard, reports what is still outstanding, and creates a working brief that hands over to the university-assignment skill. Use when the user asks which assignments are outstanding, what is due, what is late, what they already handed in, asks to start or solve work on an assignment, or wants a dashboard of their courses — "تکالیفم را بررسی کن", "چیزی از قلم افتاده؟", "کدام تکلیف تحویل نشده", "مهلت‌ها کی است", "یه داشبورد از درس‌هام بساز", "برای این تکلیف بریف بساز", "تکلیفمو حل کن". The user speaks; you call the API. The only thing asked of a human is reading the login captcha.'
+description: 'Tracks the user''s CW coursework and Quera classes and assignment lists, supplementary course resources, durable solution revisions and verification evidence through Codex. Use when the user asks what is due, what is late, to start, continue, revise or solve coursework, or to see progress — "تکالیفم را بررسی کن", "تکالیف کوئرا", "چیزی از قلم افتاده؟", "کدام تکلیف تحویل نشده", "مهلت‌ها کی است", "تکلیفمو حل کن", "ادامهٔ تکلیفم", "منبع این درس را اضافه کن". The user speaks; you call the API. Credentials are supplied by the user and saved in Windows-protected storage. CW captcha OCR may need the user to read an image; the user supplies OTPs. Quera assignment listing has offline fixture coverage but needs live account acceptance; assignment prompt/attachment retrieval and interactive CAPTCHA continuation remain incomplete.'
 ---
 
 # Sharif courseware (cw.sharif.ir)
@@ -74,6 +74,12 @@ looks like it may be the one", never as "you have already done this".
 
 ## The flow
 
+For the shared catalog, call `api.study_view()` and `api.study_refresh()`; these read
+the multi-platform projection and refresh configured connections independently. The
+older `api.status()` and `api.outstanding()` calls remain the CW-only compatibility
+view. Never infer an empty cross-platform inbox from an unavailable or incomplete
+target.
+
 ### 1. Refresh, if the data is stale
 
 `api.status()["refreshed"]` says how old the submission statuses are. Countdowns are
@@ -86,34 +92,148 @@ today, or when the user asks for the current picture.
 detail, not the point.** Say what is left, in how long, and what it is — not "you have
 2 open items in 1 course".
 
-### 3. Hand over to `university-assignment`
+### 3. Start, resume, and complete selected work
 
-When the user wants to actually *do* something outstanding:
+Start only after the user selects an assignment or explicitly asks for a group such as
+everything due this week. For an ambiguous selection, show the open assignments from
+`api.outstanding()` for the legacy CW store or `api.study_view()` for the shared
+catalog, then ask which item or group they mean. Keep the user's stated priority when
+ordering a selected group.
+
+When the assignment is listed in `api.study_view()["platform_assignments"]`, use its
+exact `ref` with `api.study_prepare({"task_ref": ref})`. This is the shared CW/Quera
+path: it retrieves the selected prompt, creates or resumes the stable work record, and
+returns resources bound to both that exact task and its explicitly linked course
+offering. Read the returned resource snapshots before solving. Use the older CW `cmid`
+path below for legacy-only course stores or when the shared connection inventory is not
+available.
+
+For a site assignment, call `api.collect_assignment({"site": {"cmid": id}})`. The
+assignment must already be in the local store. Handle `needs_credentials`,
+`captcha_required`, `captcha_rejected`, `not_found`, `needs_input`, and `failed` as
+separate states; never treat an incomplete fetch as an empty assignment. For a file or
+text the user supplied, pass a `manual` source with its course, title, prompt and
+attachment paths. `collect_assignment` extracts text from `.txt`, `.md` and `.csv`;
+read other formats with the matching document skill and retain the original file.
+
+Create or resume the durable record with:
 
 ```python
-api.make_brief(cmid=<id>)   # or ask, if it returns needs_choice
+started = api.work_start({"received": intake["input"]})
+work_id = started["work_id"]
+current = api.work_get(work_id)
 ```
 
-That writes:
+If the start result is `exists`, resume that item. When `input_changed` is true, call
+`api.work_sync(work_id, intake["input"], expected_revision=current["revision"])` and
+re-read it. A changed prompt or attachment requires reassessing affected work; a
+deadline-only change does not invalidate the answer. For a manually supplied source,
+`api.work_start({"manual": {...}})` is also supported. Save progress with
+`api.work_save(..., expected_revision=current_revision)` after each material step;
+always use the revision just returned to avoid overwriting another checkpoint.
 
+For an explicitly selected group, collect each selected item's input first, then call
+`api.work_group_start([{"received": input_a}, {"received": input_b}, ...])`. It orders
+members by the user's priority and deadline and returns a `group_id`. Save that id in
+the conversation summary; `api.work_group_get(group_id)` resumes the same fixed list
+after new assignments appear. A member with `input_changed=true` needs `work_sync`
+before continuing; when resuming later, refresh each selected site item and sync any
+changed prompt or attachment. A partial result keeps each successful member and
+reports the failures separately.
+
+Use the **`university-assignment` skill** to read the assignment and course materials,
+solve the requested work, choose the required formats, and run checks suited to the
+assignment type. Save the response sections, requirements, sources, open questions,
+and check evidence through `work_save`. Checks must name their `requirement_id`,
+method, result, evidence, and the current `input_fingerprint` and `answer_fingerprint`
+from the saved record. Do not invent missing experimental data or claim a check that
+was not run.
+
+Call `api.work_finish(work_id, delivery, expected_revision=...)` with the actual output
+file paths, their roles, and a delivery note. It copies the files into the saved work
+history. Report `ready_for_student_review` only when the API returns `status="ok"`;
+when it returns `needs_completion`, address the listed gaps or explain them. The
+student reviews and uploads the files themselves. `api.work_list()` resumes existing
+items without starting or solving anything; `api.make_brief()` remains available for
+the older brief-only workflow.
+
+## Quera and supplementary course resources
+
+Quera's current adapter can authenticate, discover class links and read an assignment
+list from the authenticated course page's server-rendered array. It accepts the list
+only when the page identity matches the selected class and any supplied assignment
+count agrees. Submission state and grades remain unknown. This parser has offline
+fixture coverage but no live account acceptance; it does not yet retrieve assignment
+prompts or attachments. If refresh is incomplete, say so rather than saying there is no
+homework. For assignment work, use an exact opaque `assignment_ref` and the received
+prompt with the same durable workflow:
+
+```python
+prepared = api.study_prepare({"received": {
+    "source": "quera",
+    "assignment_ref": task_ref,
+    "course": course_title,
+    "term": term_if_known,
+    "title": title,
+    "prompt": prompt,
+    "url": assignment_url,
+    "attachments": [{"path": file_path, "role": "prompt"}],
+}})
 ```
-work/<course>/<assignment>/
-├── brief.md      everything the site knows, and what it does not
-├── HANDOFF.md    what to do next, in order
-├── draft.md      where the answer goes
-└── source/       course material
+
+Do not invent IDs, deadlines, completeness or a successful submission state. If the
+user has no stable task reference, use the manual-input workflow and mark its source
+accordingly. Quera's login needs the user's supplied credentials and may ask for an
+OTP. The current reCAPTCHA response cannot be transferred from a browser challenge to
+the local HTTP session, so report it as an unresolved interactive challenge.
+
+When the student explicitly says two exact tasks are related, record that relationship
+with `api.assignment_relate(task_refs, reason, expected_revision=view["catalog_revision"])`.
+This annotation never merges their work IDs, submission states or checks. A prior
+answer may serve as a draft only after mapping the new task's requirements; rerun the
+new task's checks and preserve its own delivery history.
+
+When the user asks to connect an account, pass the supplied values directly to the API
+and keep them out of summaries, logs, shell commands and returned prose:
+
+```python
+connection = api.access_configure("quera", credentials)
+rotated = api.access_update(
+    connection_id, replacement_credentials,
+    expected_generation=current_credential_generation,
+)
+api.access_forget(connection_id)
 ```
 
-Then run the **`university-assignment` skill on that folder**. Its `brief.md` section ۲
-(the assignment text) is deliberately empty because the site does not expose it — fill
-it in from the assignment page or the lecturer's material before solving. Do not solve
-a brief whose section ۲ is still empty: that is solving the wrong question
-confidently.
+The default protected vault uses Windows DPAPI. If it returns
+`secure_store_unavailable`, report that state; never save credentials in plain JSON or
+substitute a plaintext fallback. Reconfiguring credentials invalidates old sessions and
+pending challenges. An OTP response resumes that saved attempt with
+`api.study_continue(continuation_id, {"kind": "otp", "value": code})`.
 
-`make_brief` will not overwrite an existing folder without `force=True`, because
-sections 2 to 7 are the user's own writing. Report that rather than forcing it.
+Attach a supplementary resource once to the chosen course offering or exact task:
 
-## The captcha — the one thing a human does
+```python
+attached = api.resource_attach(
+    {"title": title, "location": {"kind": "file", "path": path}},
+    to={"offering_id": offering_id},
+    extent={"pages": "14-22"},
+)
+snapshot = api.resource_capture(
+    attached["resource_id"], extent={"pages": "14-22"}
+)
+materials = api.resource_view(target={"offering_id": offering_id})
+```
+
+`folder` accepts an explicit `extent={"files": [...]}` and captures only those files;
+`web` and `remote_file` capture the retrieved public response; `video` remains a
+reference until an actual transcript or selected content is supplied. Capture is not
+proof of use. Open and read the actual snapshot before citing it, record the precise
+parts and extent through `work_save(resource_uses=...)`, and let the API validate the
+snapshot hash and binding. Course official material and assignment constraints take
+precedence over supplements. Use a resource only within the captured extent.
+
+## The CW captcha — when OCR needs a human
 
 `api.refresh()` logs in and downloads. cw.sharif.ir puts an image captcha
 (`local_logincaptcha`) on the login form, so the first call returns:

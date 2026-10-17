@@ -1,4 +1,4 @@
-"""Point the installed skills at this checkout, so there is one source of truth.
+"""Point installed Codex skills at this checkout, so there is one source of truth.
 
 The skills in `.agents/skills/` are the project. The copy under the agent's config
 directory is what actually gets loaded, and a *copy* of them is a fork waiting to
@@ -8,10 +8,11 @@ could never hand work over. A file link removes the possibility rather than aski
 people to remember.
 
     python tools/link_skills.py            # link, creating the config dir if needed
-    python tools/link_skills.py --check    # report drift, change nothing
+    python tools/link_skills.py --check    # report drift in installed copies, change nothing
 
-`--check` is what the test suite calls, so a divergence fails the suite instead of
-quietly changing what the agent reads.
+`--check` is what the test suite calls, so a divergent installed copy fails the suite
+instead of quietly changing what Codex reads. A skill that has not been installed is
+not drift and does not fail the check.
 """
 
 from __future__ import annotations
@@ -26,11 +27,15 @@ SKILLS = ROOT / ".agents" / "skills"
 
 
 def config_skills_dir() -> Path:
-    """Where the agent looks for skills, per its own config layout."""
-    env = os.environ.get("OPENCODE_CONFIG_DIR")
-    if env:
-        return Path(env) / "skills"
-    return Path.home() / ".config" / "opencode" / "skills"
+    """Where Codex looks for skills, per its own config layout."""
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home:
+        return Path(codex_home) / "skills"
+    # Keep explicit OpenCode config support for existing users of the old workflow.
+    opencode_config = os.environ.get("OPENCODE_CONFIG_DIR")
+    if opencode_config:
+        return Path(opencode_config) / "skills"
+    return Path.home() / ".codex" / "skills"
 
 
 def is_link(path: Path) -> bool:
@@ -72,6 +77,8 @@ def link_all(check_only: bool = False) -> int:
     if not SKILLS.is_dir():
         print("no skills in {}".format(SKILLS), file=sys.stderr)
         return 2
+    if check_only and not config.is_dir():
+        return 0
 
     problems = []
     for name in sorted(p.name for p in SKILLS.iterdir() if p.is_dir()):
@@ -95,7 +102,6 @@ def link_all(check_only: bool = False) -> int:
             _unlink(dst)
 
         if check_only:
-            problems.append("{}: not linked".format(name))
             continue
 
         config.mkdir(parents=True, exist_ok=True)

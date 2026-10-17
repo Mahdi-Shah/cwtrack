@@ -12,7 +12,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from http.cookiejar import CookieJar
+from http.cookiejar import Cookie, CookieJar
 
 DEFAULT_BASE = os.environ.get("CW_BASE", "https://cw.sharif.ir")
 USER_AGENT = (
@@ -40,6 +40,68 @@ class Client:
             urllib.request.HTTPCookieProcessor(CookieJar()),
             urllib.request.HTTPSHandler(context=ctx),
         )
+
+    @property
+    def cookie_jar(self) -> CookieJar:
+        """Expose the in-memory jar to the protected session adapter."""
+        return next(
+            handler.cookiejar
+            for handler in self.opener.handlers
+            if isinstance(handler, urllib.request.HTTPCookieProcessor)
+        )
+
+    def export_cookies(self) -> list[dict]:
+        """Return serializable cookie state for storage inside the OS vault."""
+        return [
+            {
+                "version": cookie.version,
+                "name": cookie.name,
+                "value": cookie.value,
+                "port": cookie.port,
+                "port_specified": cookie.port_specified,
+                "domain": cookie.domain,
+                "domain_specified": cookie.domain_specified,
+                "domain_initial_dot": cookie.domain_initial_dot,
+                "path": cookie.path,
+                "path_specified": cookie.path_specified,
+                "secure": cookie.secure,
+                "expires": cookie.expires,
+                "discard": cookie.discard,
+                "rest": dict(cookie._rest),
+                "rfc2109": cookie.rfc2109,
+            }
+            for cookie in self.cookie_jar
+        ]
+
+    def import_cookies(self, cookies: list[dict]) -> None:
+        """Restore only structurally valid cookie values into the in-memory jar."""
+        if not isinstance(cookies, list):
+            raise ValueError("cookie state must be a list")
+        for item in cookies:
+            if not isinstance(item, dict) or not all(
+                isinstance(item.get(field), str)
+                for field in ("name", "value", "domain", "path")
+            ):
+                raise ValueError("cookie state is invalid")
+            self.cookie_jar.set_cookie(Cookie(
+                version=int(item.get("version", 0)),
+                name=item["name"],
+                value=item["value"],
+                port=item.get("port"),
+                port_specified=bool(item.get("port_specified", False)),
+                domain=item["domain"],
+                domain_specified=bool(item.get("domain_specified", False)),
+                domain_initial_dot=bool(item.get("domain_initial_dot", False)),
+                path=item["path"],
+                path_specified=bool(item.get("path_specified", True)),
+                secure=bool(item.get("secure", False)),
+                expires=item.get("expires"),
+                discard=bool(item.get("discard", True)),
+                comment=None,
+                comment_url=None,
+                rest=dict(item.get("rest", {})),
+                rfc2109=bool(item.get("rfc2109", False)),
+            ))
 
     def _open(self, req: urllib.request.Request):
         last: Exception | None = None

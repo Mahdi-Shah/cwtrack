@@ -52,6 +52,8 @@ class TestItNeverAsksAnything:
             raise AssertionError("the API prompted; a skill has no terminal to answer")
 
         monkeypatch.setattr(builtins, "input", refuse)
+
+
         monkeypatch.setattr(auth, "input", refuse, raising=False)
 
     def test_reading_the_store_does_not_prompt(self, store):
@@ -335,6 +337,49 @@ class TestRefreshRefusesToGuess:
         assert api.refresh(home=tmp_path)["status"] == "needs_credentials"
 
 
+class TestRefreshAfterLogin:
+    def test_successful_login_fetches_the_assignments(self, monkeypatch, tmp_path):
+        assignment_page = (
+            Path(__file__).parent / "fixtures" / "course_90000_assign.html"
+        ).read_text(encoding="utf-8")
+
+        class LoggedInAfterPassword:
+            def __init__(self):
+                self.authenticated = False
+
+            def get(self, path, params=None):
+                if path == "/login/index.php":
+                    return '<form><input name="logintoken" value="TOK"></form>'
+                if path == "/my/courses.php":
+                    return '<a href="/course/view.php?id=90000">Test course</a>'
+                if path == "/my/":
+                    return "<html></html>"
+                if path == "/mod/assign/index.php":
+                    return assignment_page
+                raise AssertionError("unexpected request: {}".format(path))
+
+            def post(self, path, data):
+                self.authenticated = True
+                return "<html>ok</html>"
+
+            def logged_in(self):
+                return self.authenticated
+
+        client = LoggedInAfterPassword()
+        monkeypatch.setattr(api, "Client", lambda base: client)
+
+        result = api.refresh(
+            home=tmp_path / "home",
+            data=tmp_path / "data",
+            user="student",
+            password="example",
+        )
+
+        assert result["status"] == "ok"
+        assert result["pages"] == 1
+        assert result["assignments"] > 0
+
+
 class TestTheCliAndTheSkillAgree:
     """They are the same code path, so this is a test that it stays that way."""
 
@@ -359,10 +404,121 @@ class TestTheDashboard:
         def explode(*a, **k):  # pragma: no cover - the point is that it never runs
             raise AssertionError("build_dashboard opened a browser")
 
-        monkeypatch.setattr("os.startfile", explode)
+        monkeypatch.setattr("os.startfile", explode, raising=False)
         out = api.build_dashboard(store, tmp_path / "index.html")
         assert out.is_file()
         assert "font-face" in out.read_text(encoding="utf-8")
+
+    def test_it_builds_a_searchable_resource_library_page(self, store, tmp_path):
+        source = tmp_path / "lab-guide.pdf"
+        source.write_bytes(b"%PDF-1.4 sample")
+        api.resource_attach(
+            {
+                "title": "دستور کار آزمایشگاه معماری",
+                "location": {"kind": "file", "path": str(source)},
+                "provenance": "quera-course",
+            },
+            to={"offering_id": "computer-architecture-1405"},
+            extent={"pages": "4-11"},
+            data=store,
+        )
+
+        dashboard = api.build_dashboard(store, tmp_path / "index.html")
+        library = tmp_path / "resources.html"
+        dashboard_html = dashboard.read_text(encoding="utf-8")
+        library_html = library.read_text(encoding="utf-8")
+
+        assert "resources.html" in dashboard_html
+        assert "کتابخانهٔ منابع" in library_html
+        assert "دستور کار آزمایشگاه معماری" in library_html
+        assert "صفحه‌های 4-11" in library_html
+        assert "data-resource-filter='file'" in library_html
+        assert "data-resource-search" in library_html
+
+    def test_it_shows_an_empty_resource_library_instead_of_hiding_it(self, store, tmp_path):
+        api.build_dashboard(store, tmp_path / "index.html")
+
+        library_html = (tmp_path / "resources.html").read_text(encoding="utf-8")
+
+        assert "هنوز منبعی به درس‌ها وصل نشده" in library_html
+        assert "منابع تکمیلی" in library_html
+
+    def test_dashboard_groups_resources_under_their_course(self):
+        from datetime import datetime
+
+        from cwtrack.dashboard import build
+
+        task_ref = {
+            "connection_id": "quera-1", "class_id": "arch-1", "assignment_id": "lab-2"
+        }
+        page = build(
+            {"fullname": "دانشجو", "username": "student"},
+            [],
+            {},
+            datetime(2026, 10, 18),
+            0,
+            has_course_data=False,
+            study_view={
+                "offerings": [{
+                    "id": "architecture-1405",
+                    "title": "آزمایشگاه معماری کامپیوتر",
+                    "term": "پاییز ۱۴۰۵",
+                }],
+                "classes": [{
+                    "ref": {"connection_id": "quera-1", "class_id": "arch-1"},
+                    "title": "آز معماری",
+                    "offering": {
+                        "id": "architecture-1405",
+                        "title": "آزمایشگاه معماری کامپیوتر",
+                        "term": "پاییز ۱۴۰۵",
+                    },
+                }],
+                "platform_assignments": [{"ref": task_ref, "title": "پیش گزارش آزمایش دوم"}],
+                "connections": [],
+                "resources": [
+                    {
+                        "id": "lab-guide",
+                        "title": "دستور کار آزمایشگاه",
+                        "location": {"kind": "file", "path": "C:/sources/guide.pdf"},
+                        "revision": 1,
+                        "provenance": "quera-course",
+                    },
+                    {
+                        "id": "adder-datasheet",
+                        "title": "دیتاشیت جمع‌کننده",
+                        "location": {"kind": "web", "url": "https://example.com/adder"},
+                        "revision": 1,
+                        "provenance": "manufacturer",
+                    },
+                ],
+                "resource_bindings": [
+                    {
+                        "id": "binding-course",
+                        "resource_id": "lab-guide",
+                        "active": True,
+                        "target": {"offering_id": "architecture-1405"},
+                        "extent": {"pages": "4-11"},
+                    },
+                    {
+                        "id": "binding-task",
+                        "resource_id": "adder-datasheet",
+                        "active": True,
+                        "target": {"task_ref": task_ref},
+                        "extent": {"sections": "product details"},
+                    },
+                ],
+                "resource_captures": [],
+            },
+        )
+
+        assert "منابع هر درس" in page
+        assert page.count("class='resource-course-group'") == 1
+        assert "آزمایشگاه معماری کامپیوتر" in page
+        assert "دستور کار آزمایشگاه" in page
+        assert "دیتاشیت جمع‌کننده" in page
+        assert "پیش گزارش آزمایش دوم" in page
+        assert "صفحه‌های 4-11" in page
+        assert ".resource-course-head{position:relative" in page
 
     def test_it_sees_a_file_dropped_in_after_the_last_fetch(self, store, tmp_path):
         cid = next((store / "courses").iterdir())
@@ -370,6 +526,254 @@ class TestTheDashboard:
         (folder / "new.pdf").write_bytes(b"%PDF-1.4")
         page = api.build_dashboard(store, tmp_path / "index.html").read_text(encoding="utf-8")
         assert "new.pdf" in page
+
+    def test_it_puts_legacy_cw_assignments_in_the_same_platform_board(self, store, tmp_path):
+        assignment = tracker.load(store)[1][0]
+
+        page = api.build_dashboard(store, tmp_path / "unified.html").read_text(
+            encoding="utf-8"
+        )
+
+        assert "id='platform-tasks'" in page
+        assert "data-platform='cw'" in page
+        assert assignment.name in page
+        assert "درس‌های شارپ" in page
+
+    def test_it_shows_platform_assignments_freshness_and_supplementary_resources(
+        self, store, tmp_path
+    ):
+        class Adapter:
+            connection = {
+                "id": "quera-dashboard",
+                "platform": "quera",
+                "origin": "https://quera.org",
+            }
+
+            def observe(self, request, context):
+                if request["scope"] == "assignments":
+                    return {
+                        "status": "ok", "scope": "assignments", "coverage": "complete",
+                        "observed_at": "2026-10-17T09:00:00Z", "nodes": [{
+                            "kind": "assignment",
+                            "ref": {**request["class_ref"], "assignment_id": "q-hw"},
+                            "title": "تمرین ساختمان داده",
+                            "submission": {"state": "not_submitted"},
+                            "evaluation": {"state": "unknown"},
+                            "deadlines": [{"kind": "normal", "at": "2026-10-20T20:00:00Z"}],
+                        }],
+                    }
+                return {
+                    "status": "ok", "scope": "classes", "coverage": "complete",
+                    "observed_at": "2026-10-17T09:00:00Z", "nodes": [{
+                        "kind": "class",
+                        "ref": {"connection_id": "quera-dashboard", "class_id": "q-17"},
+                        "title": "ساختمان داده در کوئرا",
+                    }],
+                }
+
+        api.study_refresh(data=store, adapters=[Adapter()])
+        note = tmp_path / "book.md"
+        note.write_text("notes", encoding="utf-8")
+        api.resource_attach(
+            {"title": "جزوهٔ استاد", "location": {"kind": "file", "path": str(note)}},
+            to={"offering_id": "data-structures-1405"},
+            data=store,
+        )
+
+        page = api.build_dashboard(store, tmp_path / "study.html").read_text(encoding="utf-8")
+
+        assert "تمرین ساختمان داده" in page
+        assert "ساختمان داده در کوئرا" in page
+        assert "جزوهٔ استاد" in page
+        assert "2026-10-17T09:00:00Z" in page
+        assert "state-pill state-todo'>ارسال نشده" in page
+        assert "data-assignment-filter='check'" in page
+        assert "جست‌وجوی تکلیف یا درس" in page
+        assert "data-local-date='2026-10-20T20:00:00Z'" in page
+
+    def test_it_keeps_an_unavailable_platform_submission_status_unknown(
+        self, store, tmp_path
+    ):
+        class Adapter:
+            connection = {
+                "id": "quera-unknown-status",
+                "platform": "quera",
+                "origin": "https://quera.org",
+            }
+
+            def observe(self, request, context):
+                observed_at = "2026-10-17T09:00:00Z"
+                if request["scope"] == "assignments":
+                    return {
+                        "status": "ok", "scope": "assignments", "coverage": "complete",
+                        "observed_at": observed_at, "nodes": [{
+                            "kind": "assignment",
+                            "ref": {**request["class_ref"], "assignment_id": "q-unknown"},
+                            "title": "تمرین با وضعیت نامشخص",
+                            "submission": {"state": "unknown", "raw": ""},
+                            "evaluation": {"state": "unknown", "grade": None},
+                            "deadlines": [],
+                        }],
+                    }
+                return {
+                    "status": "ok", "scope": "classes", "coverage": "complete",
+                    "observed_at": observed_at, "nodes": [{
+                        "kind": "class",
+                        "ref": {"connection_id": "quera-unknown-status", "class_id": "q-19"},
+                        "title": "کلاس آزمون",
+                    }],
+                }
+
+        api.study_refresh(data=store, adapters=[Adapter()])
+        page = api.build_dashboard(store, tmp_path / "unknown-status.html").read_text(
+            encoding="utf-8"
+        )
+
+        assert "وضعیت ارسال از کوئرا دریافت نمی‌شود" in page
+        assert "برای اطمینان در کوئرا بررسی شود" in page
+        assert "ارسال: unknown" not in page
+        card_start = page.index("data-title='تمرین با وضعیت نامشخص'")
+        card_end = page.index("</article>", card_start)
+        assert "باز — ارسال نشده" not in page[card_start:card_end]
+
+    def test_it_shows_local_answer_progress_separately_from_quera_delivery(
+        self, store, tmp_path
+    ):
+        class Adapter:
+            connection = {
+                "id": "quera-work-progress",
+                "platform": "quera",
+                "origin": "https://quera.org",
+            }
+
+            def observe(self, request, context):
+                observed_at = "2026-10-17T09:00:00Z"
+                if request["scope"] == "assignments":
+                    return {
+                        "status": "ok", "scope": "assignments", "coverage": "complete",
+                        "observed_at": observed_at, "nodes": [{
+                            "kind": "assignment",
+                            "ref": {**request["class_ref"], "assignment_id": "q-work"},
+                            "title": "تمرین با پروندهٔ پاسخ",
+                            "submission": {"state": "unknown", "raw": ""},
+                            "evaluation": {"state": "unknown", "grade": None},
+                            "deadlines": [],
+                        }],
+                    }
+                return {
+                    "status": "ok", "scope": "classes", "coverage": "complete",
+                    "observed_at": observed_at, "nodes": [{
+                        "kind": "class",
+                        "ref": {"connection_id": "quera-work-progress", "class_id": "q-20"},
+                        "title": "کلاس آزمون",
+                    }],
+                }
+
+        api.study_refresh(data=store, adapters=[Adapter()])
+        ref = {
+            "connection_id": "quera-work-progress",
+            "class_id": "q-20",
+            "assignment_id": "q-work",
+        }
+        work_dir = tmp_path / "work"
+        started = api.work_start({"received": {
+            "source": "quera", "assignment_ref": ref,
+            "title": "تمرین با پروندهٔ پاسخ", "course": "کلاس آزمون",
+            "prompt": "صورت سؤال آزمایشی",
+        }}, data=store, work=work_dir)
+        page = api.build_dashboard(
+            store, tmp_path / "work-progress.html", work=work_dir
+        ).read_text(encoding="utf-8")
+
+        card_start = page.index("data-title='تمرین با پروندهٔ پاسخ'")
+        card_end = page.index("</article>", card_start)
+        card = page[card_start:card_end]
+        assert started["stage"] == "ready_to_start"
+        assert "وضعیت ارسال از کوئرا دریافت نمی‌شود" in card
+        assert "work-ready_to_start'>آمادهٔ شروع" in card
+        assert "وضعیت تحویل" in card and "پیشرفت انجام" in card
+
+
+class TestTheUnifiedStudyView:
+    def test_it_combines_legacy_coursework_platform_classes_resources_and_saved_work(
+        self, store, tmp_path
+    ):
+        class Adapter:
+            connection = {
+                "id": "quera-student",
+                "platform": "quera",
+                "origin": "https://quera.org",
+            }
+
+            def observe(self, request, context):
+                if request["scope"] == "assignments":
+                    return {
+                        "status": "ok",
+                        "scope": "assignments",
+                        "coverage": "complete",
+                        "observed_at": "2026-10-17T09:00:00Z",
+                        "nodes": [{
+                            "kind": "assignment",
+                            "ref": {
+                                **request["class_ref"],
+                                "assignment_id": "homework-1",
+                            },
+                            "title": "تکلیف اول",
+                            "submission": {"state": "not_submitted"},
+                            "evaluation": {"state": "unknown"},
+                            "deadlines": [],
+                        }],
+                    }
+                return {
+                    "status": "ok",
+                    "scope": "classes",
+                    "coverage": "complete",
+                    "observed_at": "2026-10-17T09:00:00Z",
+                    "nodes": [{
+                        "kind": "class",
+                        "ref": {"connection_id": "quera-student", "class_id": "17"},
+                        "title": "کلاس کوئرا",
+                    }],
+                }
+
+        original_assignments = (store / "assignments.json").read_bytes()
+        row = api.outstanding(store)[0]
+        work_result = api.work_start({
+            "manual": {
+                "course": row["course"],
+                "title": row["name"],
+                "prompt": "صورت آزمایشی",
+            }
+        }, data=store, work=tmp_path / "work")
+        assert work_result["status"] == "ok"
+        resource_file = tmp_path / "notes.md"
+        resource_file.write_text("notes", encoding="utf-8")
+        api.resource_attach(
+            {"title": "جزوهٔ تکمیلی", "location": {
+                "kind": "file", "path": str(resource_file)
+            }},
+            to={"offering_id": "discrete-1405"},
+            data=store,
+        )
+
+        assert api.study_refresh(data=store, adapters=[Adapter()]) == {
+            "status": "ok",
+            "targets": [{
+                "connection_id": "quera-student",
+                "platform": "quera",
+                "status": "ok",
+            }],
+        }
+        view = api.study_view(data=store, work=tmp_path / "work")
+
+        assert view["status"] == "ok"
+        assert len(view["assignments"]) == len(tracker.load(store)[1])
+        assert view["classes"][0]["title"] == "کلاس کوئرا"
+        assert view["connections"][0]["platform"] == "quera"
+        assert view["platform_assignments"][0]["ref"]["assignment_id"] == "homework-1"
+        assert view["resources"][0]["title"] == "جزوهٔ تکمیلی"
+        assert view["work"][0]["work_id"] == work_result["work_id"]
+        assert (store / "assignments.json").read_bytes() == original_assignments
 
 
 class TestTheSkillsPointAtThisCheckout:
@@ -381,13 +785,29 @@ class TestTheSkillsPointAtThisCheckout:
     is a file link, and this is the test that keeps it one.
     """
 
+    def test_check_skips_when_codex_has_not_installed_project_skills(self, tmp_path, monkeypatch):
+        sys.path.insert(0, str(ROOT / "tools"))
+        import link_skills
+
+        monkeypatch.setattr(link_skills, "config_skills_dir", lambda: tmp_path / "missing")
+        assert link_skills.link_all(check_only=True) == 0
+
+    def test_check_allows_an_empty_codex_skills_directory(self, tmp_path, monkeypatch):
+        sys.path.insert(0, str(ROOT / "tools"))
+        import link_skills
+
+        config = tmp_path / "skills"
+        config.mkdir()
+        monkeypatch.setattr(link_skills, "config_skills_dir", lambda: config)
+        assert link_skills.link_all(check_only=True) == 0
+
     def test_no_skill_is_installed_as_a_separate_copy(self):
         sys.path.insert(0, str(ROOT / "tools"))
         import link_skills
 
         config = link_skills.config_skills_dir()
         if not config.is_dir():
-            pytest.skip("no agent config skills directory on this machine")
+            pytest.skip("no Codex config skills directory on this machine")
 
         for name in ("sharif-cw", "university-assignment"):
             installed = config / name
@@ -440,3 +860,415 @@ class TestTheSkillsPointAtThisCheckout:
         # Whatever example is given, it must not look like a real credential.
         for value in re.findall(r"CW_(?:USER|PASS)\s*=\s*\"?([^\"\n]+)", skill):
             assert not re.search(r"\d{6,}", value), value
+
+
+def test_configured_platform_account_flows_through_secure_refresh_into_shared_view(
+    tmp_path, monkeypatch
+):
+    class MemoryVault:
+        def __init__(self):
+            self.values = {}
+
+        def put(self, key, value):
+            self.values[key] = value
+
+        def get(self, key):
+            return self.values.get(key)
+
+        def delete(self, key):
+            self.values.pop(key, None)
+
+    class Adapter:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def observe(self, request, context):
+            if request["scope"] == "classes":
+                observation = {
+                    "status": "ok",
+                    "scope": "classes",
+                    "coverage": "complete",
+                    "nodes": [{
+                        "kind": "class",
+                        "ref": {
+                            "connection_id": self.connection["id"],
+                            "class_id": "course-17",
+                        },
+                        "title": "درس آزمایشی",
+                    }],
+                }
+            else:
+                observation = {
+                    "status": "ok",
+                    "scope": "assignments",
+                    "coverage": "complete",
+                    "nodes": [{
+                        "kind": "assignment",
+                        "ref": {
+                            "connection_id": self.connection["id"],
+                            "class_id": "course-17",
+                            "assignment_id": "exercise-3",
+                        },
+                        "title": "تمرین کوئرا",
+                        "url": "https://quera.org/course/assignments/exercise-3/problems",
+                        "submission": {"state": "unknown", "raw": ""},
+                        "evaluation": {"state": "unknown", "grade": None},
+                        "deadlines": [],
+                    }],
+                }
+            return {
+                "status": "ok",
+                "observation": observation,
+                "private_state": {"authenticated": True},
+            }
+
+        def resume(self, private_state, response):
+            raise AssertionError("no challenge expected")
+
+    home = tmp_path / "home"
+    data = tmp_path / "data"
+    vault = MemoryVault()
+    monkeypatch.setattr(api.access_store, "default_vault", lambda _: vault)
+    monkeypatch.setattr(api, "_platform_adapters", lambda _: {"quera": Adapter})
+
+    configured = api.access_configure(
+        "quera",
+        {"username": "student@example.test", "password": "private"},
+        home=home,
+    )
+    refreshed = api.study_refresh(data=data, home=home)
+    view = api.study_view(data=data, work=tmp_path / "work")
+
+    assert configured["status"] == "ok"
+    assert refreshed["status"] == "ok"
+    assert view["classes"][0]["title"] == "درس آزمایشی"
+    assert view["platform_assignments"][0]["title"] == "تمرین کوئرا"
+    assert view["platform_assignments"][0]["ref"] == {
+        "connection_id": configured["connection_id"],
+        "class_id": "course-17",
+        "assignment_id": "exercise-3",
+    }
+    assert view["connections"][0]["connection_id"] == configured["connection_id"]
+    assert "private" not in repr(view)
+
+
+def test_public_api_rotates_protected_credentials_without_returning_them(
+    tmp_path, monkeypatch
+):
+    class MemoryVault:
+        def __init__(self):
+            self.values = {}
+
+        def put(self, key, value):
+            self.values[key] = value
+
+        def get(self, key):
+            return self.values.get(key)
+
+        def delete(self, key):
+            self.values.pop(key, None)
+
+    class Adapter:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def observe(self, request, context):
+            return {"status": "unavailable"}
+
+        def resume(self, private_state, response):
+            return {"status": "unavailable"}
+
+    vault = MemoryVault()
+    monkeypatch.setattr(api.access_store, "default_vault", lambda _: vault)
+    monkeypatch.setattr(api, "_platform_adapters", lambda _: {"quera": Adapter})
+    home = tmp_path / "home"
+    connected = api.access_configure(
+        "quera", {"username": "student", "password": "old-secret"}, home=home
+    )
+    vault.put("session:" + connected["connection_id"], {"cookie": "private-cookie"})
+
+    rotated = api.access_update(
+        connected["connection_id"],
+        {"username": "student", "password": "new-secret"},
+        expected_generation=1,
+        home=home,
+    )
+
+    assert rotated == {
+        "status": "ok",
+        "connection_id": connected["connection_id"],
+        "credential_generation": 2,
+    }
+    assert "new-secret" not in repr(rotated)
+    assert vault.get("credentials:{}:2".format(connected["connection_id"])) == {
+        "username": "student", "password": "new-secret"
+    }
+    assert vault.get("session:" + connected["connection_id"]) is None
+
+
+def test_explicit_platform_selection_prepares_and_resumes_one_stable_work_item(
+    tmp_path, monkeypatch
+):
+    class MemoryVault:
+        def __init__(self):
+            self.values = {}
+
+        def put(self, key, value):
+            self.values[key] = value
+
+        def get(self, key):
+            return self.values.get(key)
+
+        def delete(self, key):
+            self.values.pop(key, None)
+
+    class Adapter:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def observe(self, request, context):
+            if request["scope"] == "classes":
+                nodes = [{
+                    "kind": "class",
+                    "ref": {"connection_id": self.connection["id"], "class_id": "28"},
+                    "title": "پایگاه داده",
+                }]
+                scope = "classes"
+            elif request["scope"] == "assignments":
+                nodes = [{
+                    "kind": "assignment",
+                    "ref": {**request["class_ref"], "assignment_id": "812"},
+                    "title": "تمرین SQL",
+                    "submission": {"state": "not_submitted"},
+                    "evaluation": {"state": "unknown"},
+                    "deadlines": [],
+                }]
+                scope = "assignments"
+            else:
+                return {
+                    "status": "ok",
+                    "observation": {
+                        "status": "ok",
+                        "scope": "assignment_detail",
+                        "coverage": "complete",
+                        "input": {
+                            "source": "site",
+                            "course_id": 28,
+                            "course": "پایگاه داده",
+                            "term": "ترم جاری",
+                            "cmid": 812,
+                            "title": "تمرین SQL",
+                            "prompt": "سه پرس‌وجو بنویسید.",
+                            "attachments": [],
+                        },
+                    },
+                    "private_state": {"authenticated": True},
+                }
+            return {
+                "status": "ok",
+                "observation": {
+                    "status": "ok",
+                    "scope": scope,
+                    "coverage": "complete",
+                    "nodes": nodes,
+                },
+                "private_state": {"authenticated": True},
+            }
+
+        def resume(self, private_state, response):
+            raise AssertionError("no challenge expected")
+
+    data = tmp_path / "data"
+    home = tmp_path / "home"
+    work = tmp_path / "work"
+    vault = MemoryVault()
+    monkeypatch.setattr(api.access_store, "default_vault", lambda _: vault)
+    monkeypatch.setattr(api, "_platform_adapters", lambda _: {"cw": Adapter})
+    connected = api.access_configure(
+        "cw", {"username": "student", "password": "private"}, home=home
+    )
+    api.study_refresh(data=data, home=home)
+    assignment = api.study_view(data=data)["platform_assignments"][0]
+    task_ref = assignment["ref"]
+    linked = api.course_link(
+        [{"connection_id": task_ref["connection_id"], "class_id": task_ref["class_id"]}],
+        {"id": "database-course", "title": "پایگاه داده", "term": "ترم جاری"},
+        expected_revision=api.study_view(data=data)["catalog_revision"],
+        data=data,
+    )
+    book = tmp_path / "database-notes.md"
+    book.write_text("مبانی SQL", encoding="utf-8")
+    course_resource = api.resource_attach(
+        {"title": "جزوهٔ پایگاه داده", "location": {"kind": "file", "path": str(book)}},
+        to={"offering_id": linked["offering"]["id"]},
+        extent={"section": "SQL"},
+        data=data,
+    )
+
+    first = api.study_prepare(
+        {"task_ref": task_ref}, data=data, home=home, work=work, vault=vault
+    )
+    resumed = api.study_prepare(
+        {"task_ref": task_ref}, data=data, home=home, work=work, vault=vault
+    )
+
+    assert connected["status"] == "ok"
+    assert first["status"] == "ok"
+    assert resumed["status"] == "exists"
+    assert first["work"]["work_id"] == resumed["work"]["work_id"]
+    assert first["work"]["input"]["prompt"] == "سه پرس‌وجو بنویسید."
+    assert first["resources"][0]["resources"][0]["id"] == course_resource["resource_id"]
+
+
+def test_received_quera_assignment_resumes_with_task_resources(tmp_path):
+    data = tmp_path / "data"
+    work = tmp_path / "work"
+    notes = tmp_path / "quera-notes.md"
+    notes.write_text("تعریف کلید خارجی", encoding="utf-8")
+    task_ref = {
+        "connection_id": "quera-account",
+        "class_id": "database-101",
+        "assignment_id": "assignment-8",
+    }
+    linked = api.course_link(
+        [{"connection_id": task_ref["connection_id"], "class_id": task_ref["class_id"]}],
+        {"id": "database-1405", "title": "پایگاه داده", "term": "پاییز ۱۴۰۵"},
+        expected_revision=0,
+        data=data,
+    )
+    attached = api.resource_attach(
+        {"title": "جزوهٔ پایگاه داده", "location": {"kind": "file", "path": str(notes)}},
+        to={"task_ref": task_ref},
+        extent={"section": "foreign keys"},
+        data=data,
+    )
+    course_notes = tmp_path / "course-reference.md"
+    course_notes.write_text("مبانی پایگاه داده", encoding="utf-8")
+    course_resource = api.resource_attach(
+        {"title": "منبع درس", "location": {"kind": "file", "path": str(course_notes)}},
+        to={"offering_id": linked["offering"]["id"]},
+        extent={"section": "foundations"},
+        data=data,
+    )
+    received = {
+        "source": "quera",
+        "assignment_ref": task_ref,
+        "course": "پایگاه داده",
+        "term": "پاییز ۱۴۰۵",
+        "title": "تمرین کوئرا",
+        "prompt": "کلید خارجی را توضیح دهید.",
+        "attachments": [],
+    }
+
+    first = api.study_prepare({"received": received}, data=data, work=work)
+    resumed = api.study_prepare({"received": received}, data=data, work=work)
+
+    assert attached["status"] == "ok"
+    assert course_resource["status"] == "ok"
+    assert first["status"] == "ok"
+    assert resumed["status"] == "exists"
+    assert first["work"]["work_id"] == resumed["work"]["work_id"]
+    assert {item["id"] for item in first["resources"]["resources"]} == {
+        attached["resource_id"], course_resource["resource_id"]
+    }
+
+
+def test_related_tasks_are_exposed_without_sharing_work_state(tmp_path):
+    data = tmp_path / "data"
+    first_ref = {
+        "connection_id": "cw-a", "class_id": "17", "assignment_id": "812"
+    }
+    second_ref = {
+        "connection_id": "quera-b", "class_id": "course-x", "assignment_id": "a-9"
+    }
+
+    related = api.assignment_relate(
+        [first_ref, second_ref], "هر دو دربارهٔ کلید خارجی هستند",
+        expected_revision=0,
+        data=data,
+    )
+    view = api.study_view(data=data, work=tmp_path / "work")
+
+    assert related["status"] == "ok"
+    assert view["assignment_relations"] == [related["relation"]]
+    assert api.work_list(data=data, work=tmp_path / "work") == []
+
+
+def test_dashboard_shows_linked_course_and_actual_resource_use_extent():
+    from datetime import datetime
+
+    from cwtrack.dashboard import build
+
+    page = build(
+        {"fullname": "دانشجو", "username": "student"},
+        [],
+        {},
+        datetime(2026, 10, 17),
+        0,
+        has_course_data=False,
+        study_view={
+            "classes": [{
+                "platform": "quera",
+                "title": "کلاس پایگاه داده",
+                "offering": {"title": "پایگاه داده", "term": "پاییز ۱۴۰۵"},
+                "tracking": {"state": "current", "term": "پاییز ۱۴۰۵"},
+                "ref": {"connection_id": "q", "class_id": "17"},
+            }],
+            "platform_assignments": [],
+            "connections": [],
+            "resources": [{"id": "book-1", "title": "مرجع پایگاه داده"}],
+            "resource_bindings": [],
+        },
+        work_items=[{
+            "input": {"title": "تمرین SQL", "course": "پایگاه داده"},
+            "stage": "in_progress",
+            "updated_at": "2026-10-17T12:00:00+03:30",
+            "resource_uses": [{
+                "resource_id": "book-1",
+                "used_extent": {"pages": "14-17"},
+                "part_ids": ["pages-14-17"],
+                "purpose": "مقایسهٔ تعریف کلید خارجی",
+            }],
+        }],
+    )
+
+    assert "پاییز ۱۴۰۵" in page
+    assert "مرجع پایگاه داده" in page
+    assert "۱۴-17" in page or "14-17" in page
+    assert "مقایسهٔ تعریف کلید خارجی" in page
+
+
+def test_dashboard_labels_explicitly_related_assignments_as_separate_work():
+    from datetime import datetime
+
+    from cwtrack.dashboard import build
+
+    first_ref = {
+        "connection_id": "cw-a", "class_id": "17", "assignment_id": "812"
+    }
+    second_ref = {
+        "connection_id": "quera-b", "class_id": "course-x", "assignment_id": "a-9"
+    }
+    page = build(
+        {"fullname": "دانشجو", "username": "student"},
+        [],
+        {},
+        datetime(2026, 10, 17),
+        0,
+        has_course_data=False,
+        study_view={
+            "classes": [],
+            "connections": [],
+            "platform_assignments": [
+                {"ref": first_ref, "title": "تمرین CW"},
+                {"ref": second_ref, "title": "تمرین Quera"},
+            ],
+            "assignment_relations": [{
+                "task_refs": [first_ref, second_ref],
+                "reason": "هر دو دربارهٔ کلید خارجی هستند",
+            }],
+        },
+    )
+
+    assert page.count("هر دو دربارهٔ کلید خارجی هستند") == 2
+    assert "تکلیف مرتبط؛ روند انجام مستقل" in page

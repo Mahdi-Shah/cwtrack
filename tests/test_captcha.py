@@ -47,7 +47,8 @@ def make_captcha(path: Path, text: str, seed: int = 0, difficulty: float = 1.0):
     for y in range(H):
         d.line([(0, y), (W, y)], fill=max(0, min(255, 240 + random.randint(-5, 5))))
 
-    font = ImageFont.truetype("arial.ttf", 27)
+    font_path = Path(__file__).resolve().parents[1] / "src" / "cwtrack" / "fonts" / "Vazirmatn-Regular.ttf"
+    font = ImageFont.truetype(str(font_path), 27)
     d.text((13, 5), text, font=font, fill=25)
 
     for _ in range(max(1, int(2 * difficulty))):
@@ -291,7 +292,10 @@ class TestNotRequired:
     def test_the_package_still_declares_no_dependencies(self):
         """The OCR must stay optional. Installing cwtrack may not be able to disturb
         a student's environment, and that promise predates this feature."""
-        import tomllib
+        try:
+            import tomllib
+        except ImportError:  # Python 3.9 and 3.10
+            import tomli as tomllib
 
         root = Path(__file__).resolve().parent.parent
         data = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
