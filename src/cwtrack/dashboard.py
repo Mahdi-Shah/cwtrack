@@ -455,6 +455,9 @@ body{background:radial-gradient(ellipse at 88% 0,#e5f2ef 0,transparent 420px),va
 .filter-count{margin-inline-start:auto;color:var(--muted);font-size:var(--measure-11);font-weight:700}
 .assignment-list{display:grid;gap:var(--measure-10)}.assignment-card{background:var(--white);border:1px solid var(--line);border-radius:var(--measure-15);overflow:hidden;transition:border-color .15s,box-shadow .15s,transform .15s}
 .assignment-card:hover{border-color:#b5d6cc;box-shadow:var(--shadow-hi);transform:translateY(-1px)}.assignment-card[hidden]{display:none}
+.local-materials-panel{margin:var(--measure-13) 0;padding:var(--measure-13) var(--measure-16);border:1px solid var(--line);border-radius:var(--measure-15);background:var(--white)}
+.local-materials-panel>summary{display:flex;align-items:center;gap:var(--measure-10);cursor:pointer;list-style:none}.local-materials-panel>summary::-webkit-details-marker{display:none}.local-materials-panel h2{margin:0;font-size:var(--measure-15)}.local-materials-panel>p{color:var(--muted);font-size:var(--measure-10_5)}
+.local-materials-course{margin-top:var(--measure-10);padding-top:var(--measure-9);border-top:1px solid var(--line-2)}.local-materials-course h3{margin:0 0 var(--measure-5);font-size:var(--measure-11)}.local-materials-course ul{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:var(--measure-5) var(--measure-12);margin:0;padding-inline-start:var(--measure-16)}.local-materials-course li{padding:var(--measure-4) 0;color:var(--ink-2);font-size:var(--measure-10_5)}.local-materials-course li small{display:block;color:var(--muted);font-size:9.5px}
 .assignment-head{display:grid;grid-template-columns:minmax(0,1fr) minmax(170px,230px);gap:var(--measure-15);padding:var(--measure-15) var(--measure-17) var(--measure-12)}
 .assignment-title-group{min-width:0}.assignment-title-group h3{margin:var(--measure-5) 0 var(--measure-2);font-size:var(--measure-15);line-height:1.6;font-weight:800}
 .assignment-title-group h3 a{color:var(--ink);text-decoration:none}.assignment-title-group h3 a:hover{color:var(--accent)}
@@ -1004,6 +1007,33 @@ def course_card(c, materials: dict) -> str:
     )
 
 
+def local_materials_panel(materials: dict) -> str:
+    """Show saved files from legacy CW folders without assigning them to a term."""
+    rows = []
+    for course_id, files in sorted(materials.items(), key=lambda item: str(item[0])):
+        if not files:
+            continue
+        names = "".join(
+            "<li><span>{}</span><small>{} · {}</small></li>".format(
+                esc(item.name), esc(item.kind), "{:,} بایت".format(item.bytes)
+            )
+            for item in files
+        )
+        rows.append(
+            "<section class='local-materials-course'><h3>شناسهٔ قدیمی CW: {}</h3>"
+            "<ul>{}</ul></section>".format(esc(course_id), names)
+        )
+    if not rows:
+        return ""
+    return (
+        "<details class='local-materials-panel panel-disclosure' open>"
+        "<summary><h2>فایل‌های محلیِ درس‌های قدیمی</h2>"
+        "<span class='collapse-hint' aria-hidden='true'></span></summary>"
+        "<p>این فایل‌ها از پوشه‌های CW خوانده شده‌اند؛ تا وقتی نگاشت نشده‌اند، "
+        "به درس نیم‌سال نسبت داده نمی‌شوند.</p>{}</details>"
+    ).format("".join(rows))
+
+
 def order(items):
     return items
 
@@ -1520,7 +1550,7 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
             "<h3>{}</h3>"
              "<p class='assignment-course'>{} · {}</p><span class='collapse-hint' aria-hidden='true'></span></div>"
             "<div class='deadline-box'><span>مهلت عادی</span>{}</div></summary>"
-            "<div class='assignment-body'>"
+            "<article class='assignment-body'>"
             "<div class='status-grid'>"
             "<div><small>وضعیت تحویل</small><span class='state-pill state-{}'>{}</span></div>"
             "<div><small>نتیجهٔ ارزیابی</small><span class='state-value'>{}</span></div>"
@@ -1528,7 +1558,7 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
             "</div>{}{}"
             "<div class='assignment-foot'><span>آخرین دریافت: <time data-local-date='{}'>{}</time></span>"
             "<a class='assignment-open' href='{}' target='_blank' rel='noreferrer'>"
-            "رفتن به تکلیف <span aria-hidden='true'>←</span></a></div></div></details>".format(
+            "رفتن به تکلیف <span aria-hidden='true'>←</span></a></div></article></details>".format(
                 esc(title), esc(course), esc(platform), submission_filter,
                 due_epoch if due_epoch is not None else "",
                 esc(labels.get(platform, platform or "سامانه")), esc(title),
@@ -2215,6 +2245,7 @@ def build(user: dict, assignments: list, gap: dict, now: datetime, now_epoch: in
             "{timeline}"
             "{tiles}"
             "{platforms}"
+            "{local_materials}"
             "{resources}"
             "{work_panel}"
         ).format(
@@ -2223,11 +2254,12 @@ def build(user: dict, assignments: list, gap: dict, now: datetime, now_epoch: in
             timeline=timeline(task_timeline, now_epoch),
             tiles=tiles(dashboard_tasks, now_epoch),
             platforms=platform_panel(dashboard_study, work_items),
+            local_materials=local_materials_panel(materials),
             resources=resource_panel(dashboard_study),
             work_panel=work_panel(work_items, resource_titles),
         )
     else:
-        body = banners + resource_panel(dashboard_study) + work_panel(work_items, resource_titles) + (
+        body = banners + local_materials_panel(materials) + resource_panel(dashboard_study) + work_panel(work_items, resource_titles) + (
             "<div class='empty'><div class='big'>▤</div>"
             "<div>هنوز چیزی جمع نشده. اولین بار:</div>"
             "<code>cwtrack fetch</code></div>"

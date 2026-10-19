@@ -205,7 +205,7 @@ class TestPrivacyPatterns:
             ).stdout.split()
         )
         for prefix in ("cw-data", ".cw", "work", "reports"):
-            leaked = [p for p in tracked if p.startswith(prefix)]
+            leaked = [p for p in tracked if p == prefix or p.startswith(prefix + "/")]
             assert not leaked, "{} should be gitignored: {}".format(prefix, leaked)
 
     def test_the_fixtures_are_tracked(self):
