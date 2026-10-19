@@ -775,7 +775,7 @@ def action_panel(items: list[dict], now_epoch: int) -> str:
     for a in items:
         due = a["due"]
         cls = "hot" if a["state"] == "todo" and a["regular_due"] is not None and a["regular_due"] < now_epoch and not (a["late_due"] and a["late_due"] >= now_epoch) else (
-            "soon" if (due and due - now_epoch) <= 3 * 86400 else "calm"
+            "soon" if due is not None and due - now_epoch <= 3 * 86400 else "calm"
         )
         status_note = "نیازمند بررسی وضعیت تحویل" if a["state"] == "check" else (
             "مهلت عادی گذشته؛ مهلت اضافه هنوز باز است"
