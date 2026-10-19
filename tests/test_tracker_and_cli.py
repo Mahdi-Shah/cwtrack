@@ -336,14 +336,16 @@ class TestCli:
         with pytest.raises(CwError, match="پیدا نشد"):
             self._run(["gaps", "--data", str(tmp_path / "absent")])
 
-    def test_ui_writes_a_self_contained_page(self, store, capsys):
+    def test_ui_writes_a_self_contained_page(self, store, capsys, monkeypatch):
+        monkeypatch.setattr("os.startfile", lambda *_args: None, raising=False)
         assert self._run(["ui", "--data", str(store)]) == 0
         html = (store / "index.html").read_text(encoding="utf-8")
         assert html.startswith("<!doctype html>")
         assert "font/ttf;base64" in html, "fonts must be inlined, not linked"
         assert "<script" in html
 
-    def test_ui_is_valid_utf8_and_rtl(self, store, capsys):
+    def test_ui_is_valid_utf8_and_rtl(self, store, capsys, monkeypatch):
+        monkeypatch.setattr("os.startfile", lambda *_args: None, raising=False)
         self._run(["ui", "--data", str(store)])
         html = (store / "index.html").read_text(encoding="utf-8")
         assert "dir='rtl'" in html or 'dir="rtl"' in html
