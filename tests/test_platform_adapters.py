@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from cwtrack.platforms.cw import CWAdapter
-from cwtrack.platforms.quera import QueraAdapter
+from cwtrack.platforms.quera import QueraAdapter, QueraHTTPClient
 
 
 class FakeCwClient:
@@ -23,6 +23,8 @@ class FakeCwClient:
     def get(self, path, params=None):
         if path == "/my/courses.php":
             return '<a href="/course/view.php?id=101">Algorithms</a>'
+        if path == "/course/view.php" and params == {"id": 101}:
+            return "<html><h1>Algorithms</h1></html>"
         if path == "/mod/assign/index.php" and params == {"id": 101}:
             fixture = Path(__file__).parent / "fixtures" / "course_90000_assign.html"
             return fixture.read_text(encoding="utf-8")
@@ -66,6 +68,66 @@ def test_cw_adapter_observes_classes_and_assignments_with_a_private_session(tmp_
         "assignment_id": "90001",
     }
     assert assignments["observation"]["nodes"][0]["submission"]["state"]
+
+
+def test_cw_partial_class_scan_identifies_the_unreadable_course(tmp_path):
+    class MissingTitleClient(FakeCwClient):
+        def get(self, path, params=None):
+            if path == "/my/courses.php":
+                return (
+                    '<a href="/course/view.php?id=101">Algorithms</a>'
+                    '<a href="/course/view.php?id=102">Databases</a>'
+                )
+            if path == "/course/view.php" and params == {"id": 102}:
+                return "<html><title>Unexpected page</title></html>"
+            return super().get(path, params)
+
+    adapter = CWAdapter(
+        {"id": "cw-account", "platform": "cw", "origin": "https://cw.sharif.ir"},
+        client_factory=MissingTitleClient,
+        challenge_root=tmp_path,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+
+    result = adapter.observe(
+        {"scope": "classes"},
+        {"session": {"cookies": {"MoodleSession": "private-cookie"}}},
+    )
+
+    assert result["status"] == "ok"
+    assert result["observation"]["status"] == "partial"
+    assert result["observation"]["failure"] == {
+        "course_id": "102",
+        "reason": "course_title_not_found",
+    }
+
+
+def test_cw_class_inventory_does_not_depend_on_assignment_index(tmp_path):
+    class AssignmentIndexUnavailableClient(FakeCwClient):
+        def get(self, path, params=None):
+            if path == "/my/courses.php":
+                return '<a href="/course/view.php?id=101">Algorithms</a>'
+            if path == "/course/view.php" and params == {"id": 101}:
+                return "<html><h1>Algorithms</h1></html>"
+            if path == "/mod/assign/index.php":
+                raise OSError("this course has no assignment index")
+            return super().get(path, params)
+
+    adapter = CWAdapter(
+        {"id": "cw-account", "platform": "cw", "origin": "https://cw.sharif.ir"},
+        client_factory=AssignmentIndexUnavailableClient,
+        challenge_root=tmp_path,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+
+    result = adapter.observe(
+        {"scope": "classes"},
+        {"session": {"cookies": {"MoodleSession": "private-cookie"}}},
+    )
+
+    assert result["observation"]["status"] == "ok"
+    assert result["observation"]["coverage"] == "complete"
+    assert result["observation"]["nodes"][0]["title"] == "Algorithms"
 
 
 class FakeQueraClient:
@@ -313,7 +375,7 @@ def test_quera_assignment_list_count_mismatch_stays_incomplete():
     assert result["observation"]["nodes"] == []
 
 
-def test_quera_assignment_detail_does_not_claim_to_have_received_a_prompt():
+def test_quera_assignment_detail_returns_the_published_problem_prompt():
     class AuthenticatedClient:
         def __init__(self, base):
             self.base = base
@@ -325,11 +387,40 @@ def test_quera_assignment_detail_does_not_claim_to_have_received_a_prompt():
             return []
 
         def get(self, path):
+            if path == "/course/assignments/781/problems":
+                return "https://quera.org" + path, (
+                    '<title>تمرین اول - پایگاه داده</title>'
+                    '<div id="description_md-358899">'
+                    'صورت سؤال: کلید خارجی را توضیح دهید. '
+                    '![نمودار](https://dns-sut.s3.ir-central1.arvanstorage.ir/course/schema.png) '
+                    '[صورت تمرین](https://quera.org/assignment/781/get_pdf_file)'
+                    '</div>'
+                )
+            if path == "/course/db101":
+                return "https://quera.org" + path, (
+                    '<a href="/course/db101/files/notes.pdf">جزوهٔ درس</a>'
+                    '<script id="__NEXT_DATA__">'
+                    '{"props":{"pageProps":{"course":{"id":"db101",'
+                    '"lectures":[]}}}}</script>'
+                )
             return "https://quera.org/course/", (
                 '<script id="__NEXT_DATA__">'
                 '{"props":{"pageProps":{"globalServerValues":'
                 '{"currentUser":{"is_authenticated":true}}}}}</script>'
             )
+
+        def download(self, url, folder):
+            folder = Path(folder)
+            folder.mkdir(parents=True, exist_ok=True)
+            if "schema.png" in url:
+                filename = "schema.png"
+            elif "notes.pdf" in url:
+                filename = "notes.pdf"
+            else:
+                filename = "assignment.pdf"
+            path = folder / filename
+            path.write_bytes(b"test attachment bytes")
+            return str(path)
 
     adapter = QueraAdapter(
         {"id": "quera-account", "platform": "quera", "origin": "https://quera.org"},
@@ -350,6 +441,107 @@ def test_quera_assignment_detail_does_not_claim_to_have_received_a_prompt():
         {"session": {"cookies": []}},
     )
 
-    assert result["status"] == "unavailable"
+    assert result["status"] == "ok"
     assert result["observation"]["scope"] == "assignment_detail"
-    assert result["observation"]["coverage"] == "incomplete"
+    assert result["observation"]["input"]["prompt"] == (
+        "صورت سؤال: کلید خارجی را توضیح دهید. "
+        "![نمودار](https://dns-sut.s3.ir-central1.arvanstorage.ir/course/schema.png) "
+        "[صورت تمرین](https://quera.org/assignment/781/get_pdf_file)"
+    )
+    assert [item["role"] for item in result["observation"]["input"]["attachments"]] == [
+        "material", "prompt"
+    ]
+    assert [Path(item["path"]).name for item in result["observation"]["input"]["attachments"]] == [
+        "schema.png", "assignment.pdf"
+    ]
+    assert result["observation"]["input"]["course_materials_coverage"] == "complete"
+    course_material = result["observation"]["input"]["course_materials"][0]
+    assert course_material["title"] == "جزوهٔ درس"
+    assert course_material["url"] == "https://quera.org/course/db101/files/notes.pdf"
+    assert course_material["role"] == "material"
+    assert Path(course_material["path"]).name == "notes.pdf"
+
+
+def test_quera_course_material_scope_reports_visible_links_separately():
+    class AuthenticatedClient:
+        def __init__(self, base):
+            self.base = base
+
+        def import_cookies(self, cookies):
+            pass
+
+        def export_cookies(self):
+            return []
+
+        def get(self, path):
+            return "https://quera.org/course/db101", (
+                '<a href="/course/db101/files/notes.pdf">جزوهٔ درس</a>'
+                '<script id="__NEXT_DATA__">'
+                '{"props":{"pageProps":{"globalServerValues":'
+                '{"currentUser":{"is_authenticated":true}},"course":'
+                '{"id":"db101","lectures":[]}}}}</script>'
+            )
+
+        def download(self, url, folder):
+            folder = Path(folder)
+            folder.mkdir(parents=True, exist_ok=True)
+            path = folder / "notes.pdf"
+            path.write_bytes(b"course notes")
+            return str(path)
+
+    adapter = QueraAdapter(
+        {"id": "quera-account", "platform": "quera", "origin": "https://quera.org"},
+        client_factory=AuthenticatedClient,
+        clock=lambda: "2026-10-19T12:00:00+03:30",
+    )
+
+    result = adapter.observe(
+        {
+            "scope": "course_materials",
+            "class_ref": {"connection_id": "quera-account", "class_id": "db101"},
+        },
+        {"session": {"cookies": []}},
+    )
+
+    assert result["status"] == "ok"
+    observation = result["observation"]
+    assert observation["scope"] == "course_materials"
+    assert observation["coverage"] == "complete"
+    assert observation["course_materials"][0]["title"] == "جزوهٔ درس"
+    assert Path(observation["course_materials"][0]["path"]).read_bytes() == b"course notes"
+
+
+def test_quera_asset_download_rejects_untrusted_hosts_before_network_access(tmp_path):
+    client = QueraHTTPClient("https://quera.org")
+
+    try:
+        client.download("https://untrusted.example/file.pdf", tmp_path)
+    except ValueError as exc:
+        assert "not allowed" in str(exc)
+    else:
+        raise AssertionError("untrusted host should be rejected before download")
+
+
+def test_quera_asset_download_persists_bounded_response_bytes(tmp_path):
+    class Response:
+        status = 200
+
+        def geturl(self):
+            return "https://quera.org/assignment/file.pdf"
+
+        def read(self, limit):
+            assert limit == 20 * 1024 * 1024 + 1
+            return b"%PDF-fake response"
+
+    class Opener:
+        def open(self, request, timeout):
+            assert request.full_url == "https://quera.org/assignment/file.pdf"
+            return Response()
+
+    client = QueraHTTPClient("https://quera.org")
+    client.opener = Opener()
+
+    path = Path(client.download("https://quera.org/assignment/file.pdf", tmp_path))
+
+    assert path.suffix == ".pdf"
+    assert path.read_bytes() == b"%PDF-fake response"

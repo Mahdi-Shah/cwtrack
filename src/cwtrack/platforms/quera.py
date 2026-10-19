@@ -7,15 +7,18 @@ incomplete instead of replacing a prior complete observation with an empty list.
 
 from __future__ import annotations
 
+import hashlib
 import http.cookiejar
 import json
 import re
 import ssl
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
+from pathlib import Path
 from typing import Callable
 
 
@@ -34,6 +37,49 @@ class QueraHTTPClient:
     def get(self, path: str) -> tuple[str, str]:
         response = self._open(self._request(path))
         return response.geturl(), response.read(12 * 1024 * 1024).decode("utf-8", "replace")
+
+    def download(self, url: str, folder: str | Path) -> str:
+        """Download a Quera or Arvan asset with an origin and size check."""
+        parsed = urllib.parse.urlsplit(url)
+        base = urllib.parse.urlsplit(self.base)
+        if (
+            parsed.scheme != "https"
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port not in (None, 443)
+            or not _allowed_asset_host(parsed.hostname, base.hostname)
+        ):
+            raise ValueError("asset host is not allowed")
+        request = urllib.request.Request(url, headers={
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0 Safari/537.36",
+        })
+        response = self.opener.open(request, timeout=self.timeout)
+        final = urllib.parse.urlsplit(response.geturl())
+        if (
+            final.scheme != "https"
+            or final.username is not None
+            or final.password is not None
+            or final.port not in (None, 443)
+            or not _allowed_asset_host(final.hostname, base.hostname)
+        ):
+            raise ValueError("asset redirect left the allowed hosts")
+        content = response.read(20 * 1024 * 1024 + 1)
+        if not content or len(content) > 20 * 1024 * 1024:
+            raise ValueError("asset is empty or exceeds the 20 MB limit")
+        digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
+        source_name = Path(urllib.parse.unquote(final.path)).name
+        if source_name in {"", ".", ".."}:
+            source_name = "assignment.pdf" if "get_pdf_file" in final.path else "asset"
+        source_name = re.sub(r"[^A-Za-z0-9._-]+", "_", source_name).strip("._") or "asset"
+        if "get_pdf_file" in final.path and not Path(source_name).suffix:
+            source_name += ".pdf"
+        stem, suffix = Path(source_name).stem, Path(source_name).suffix[:12]
+        filename = "{}-{}{}".format(stem[:90], digest[:10], suffix)
+        target_dir = Path(folder)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / filename
+        target.write_bytes(content)
+        return str(target)
 
     def post_json(self, path: str, payload: dict) -> dict:
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
@@ -133,10 +179,14 @@ class QueraAdapter:
     """Authenticate to Quera and report only confidently parsed course data."""
 
     def __init__(self, connection: dict, *, client_factory=QueraHTTPClient,
-                 clock: Callable[[], str]):
+                 clock: Callable[[], str], download_root: str | Path | None = None):
         self.connection = connection
         self._client_factory = client_factory
         self._clock = clock
+        self._download_root = Path(download_root) if download_root else (
+            Path(tempfile.gettempdir()) / "cwtrack-attachments" /
+            str(connection.get("id", "quera"))
+        )
 
     def observe(self, request: dict, context: dict) -> dict:
         if not _valid_request(request, self.connection):
@@ -290,6 +340,19 @@ class QueraAdapter:
 
     def _observe_authenticated(self, client, request: dict) -> dict:
         observed_at = self._clock()
+        if request["scope"] == "course_materials":
+            class_id = request["class_ref"]["class_id"]
+            materials, coverage, issues = self._course_materials(
+                client, {"class_id": class_id}, self._download_root
+            )
+            return {
+                "status": "ok",
+                "scope": "course_materials",
+                "coverage": coverage,
+                "observed_at": observed_at,
+                "course_materials": materials,
+                "course_materials_issues": issues,
+            }
         if request["scope"] == "assignments":
             class_id = request["class_ref"]["class_id"]
             path = "/course/{}/".format(urllib.parse.quote(class_id, safe=""))
@@ -297,7 +360,7 @@ class QueraAdapter:
                 url, page = client.get(path)
             except (OSError, TimeoutError, ConnectionError, ValueError):
                 return _failed("assignments", observed_at)
-            if _is_login_url(url) or not self._page_is_authenticated(page):
+            if _is_login_url(url):
                 return _failed("assignments", observed_at)
             nodes = _course_assignment_nodes(
                 page,
@@ -309,11 +372,46 @@ class QueraAdapter:
                 return _failed("assignments", observed_at)
             return _complete("assignments", observed_at, nodes)
         if request["scope"] == "assignment_detail":
-            # The assignment index route is known, but the authenticated problem
-            # statement and attachment markup have not been validated. Returning
-            # a successful empty/partial brief could send the student down the
-            # wrong work path, so keep the detail receipt explicitly incomplete.
-            return _failed("assignment_detail", observed_at)
+            task_ref = request["task_ref"]
+            assignment_id = urllib.parse.quote(task_ref["assignment_id"], safe="")
+            path = "/course/assignments/{}/problems".format(assignment_id)
+            try:
+                url, page = client.get(path)
+            except (OSError, TimeoutError, ConnectionError, ValueError):
+                return _failed("assignment_detail", observed_at)
+            if _is_login_url(url):
+                return _failed("assignment_detail", observed_at)
+            prompt = _problem_prompt(page)
+            if not prompt:
+                return _failed("assignment_detail", observed_at)
+            assignment = request["assignment"]
+            attachments, attachment_issues = _problem_attachments(
+                client, prompt, url, self._download_root / assignment_id
+            )
+            class_materials, materials_coverage, materials_issues = self._course_materials(
+                client, task_ref, self._download_root
+            )
+            return {
+                "status": "ok",
+                "scope": "assignment_detail",
+                "coverage": "complete",
+                "observed_at": observed_at,
+                "input": {
+                    "source": "quera",
+                    "assignment_ref": task_ref,
+                    "course": assignment.get("course", ""),
+                    "term": assignment.get("term", ""),
+                    "title": assignment.get("title", ""),
+                    "due": assignment.get("due"),
+                    "url": assignment.get("url", url),
+                    "prompt": prompt,
+                    "attachments": attachments,
+                    "course_materials": class_materials,
+                    "course_materials_coverage": materials_coverage,
+                    "course_materials_issues": materials_issues,
+                    "attachment_issues": attachment_issues,
+                },
+            }
         try:
             url, page = client.get("/course/")
         except (OSError, TimeoutError, ConnectionError, ValueError):
@@ -339,6 +437,33 @@ class QueraAdapter:
             for course_id, path, title in links.courses
         ]
         return _complete("classes", observed_at, nodes)
+
+    def _course_materials(self, client, task_ref: dict, root: Path):
+        path = "/course/{}".format(urllib.parse.quote(task_ref["class_id"], safe=""))
+        try:
+            url, page = client.get(path)
+        except (OSError, TimeoutError, ConnectionError, ValueError):
+            return [], "incomplete", [{"kind": "course_page_unavailable"}]
+        if _is_login_url(url):
+            return [], "incomplete", [{"kind": "course_page_requires_login"}]
+        links = _material_links(page, url)
+        lectures = _course_lectures(page, task_ref["class_id"])
+        materials = []
+        issues = []
+        for title, asset_url in links:
+            try:
+                local_path = client.download(asset_url, root / task_ref["class_id"])
+            except (OSError, TimeoutError, ConnectionError, ValueError) as exc:
+                issues.append({"url": asset_url, "reason": str(exc)})
+                continue
+            materials.append({
+                "title": title or Path(urllib.parse.urlsplit(asset_url).path).name,
+                "url": asset_url,
+                "path": local_path,
+                "role": "material",
+            })
+        coverage = "complete" if lectures == [] and not issues else "page_links"
+        return materials, coverage, issues
 
     @staticmethod
     def _page_is_authenticated(page: str) -> bool:
@@ -468,6 +593,147 @@ def _course_assignment_nodes(
     return nodes
 
 
+class _ProblemPrompt(HTMLParser):
+    """Read Quera's server-rendered Markdown source for one problem."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self._depth = 0
+        self.parts: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if self._depth:
+            self._depth += 1
+        elif attributes.get("id", "").startswith("description_md-"):
+            self._depth = 1
+
+    def handle_endtag(self, tag):
+        if self._depth:
+            self._depth -= 1
+
+    def handle_data(self, data):
+        if self._depth:
+            self.parts.append(data)
+
+
+def _problem_prompt(page: str) -> str:
+    parser = _ProblemPrompt()
+    parser.feed(page)
+    return "".join(parser.parts).strip()
+
+
+_MARKDOWN_LINK = re.compile(r"!?\[([^\]]*)\]\(([^)]+)\)")
+_MATERIAL_SUFFIXES = {
+    ".pdf", ".ppt", ".pptx", ".doc", ".docx", ".odt", ".rtf", ".txt",
+    ".md", ".zip", ".rar", ".7z", ".png", ".jpg", ".jpeg", ".gif",
+}
+
+
+def _problem_attachments(client, prompt: str, page_url: str, root: Path):
+    attachments = []
+    issues = []
+    seen = set()
+    for match in _MARKDOWN_LINK.finditer(prompt):
+        label, raw_url = match.groups()
+        asset_url = urllib.parse.urljoin(page_url, raw_url.strip())
+        path = urllib.parse.urlsplit(asset_url).path.lower()
+        is_image = match.group(0).startswith("!")
+        suffix = Path(path).suffix
+        is_file = suffix in _MATERIAL_SUFFIXES or "get_pdf_file" in path
+        is_pdf = suffix == ".pdf" or "get_pdf_file" in path
+        if not (is_image or is_file) or asset_url in seen:
+            continue
+        seen.add(asset_url)
+        try:
+            local_path = client.download(asset_url, root)
+        except (OSError, TimeoutError, ConnectionError, ValueError) as exc:
+            issues.append({"url": asset_url, "reason": str(exc)})
+            continue
+        # Quera's PDF endpoint omits its suffix; preserve a useful local filename.
+        local = Path(local_path)
+        if is_pdf and not local.suffix:
+            renamed = local.with_suffix(".pdf")
+            local.replace(renamed)
+            local_path = str(renamed)
+        attachments.append({
+            "path": local_path,
+            "role": "material" if is_image else "prompt",
+            "title": label.strip(),
+            "url": asset_url,
+        })
+    return attachments, issues
+
+
+class _MaterialLinks(HTMLParser):
+    def __init__(self, page_url: str):
+        super().__init__(convert_charrefs=True)
+        self.page_url = page_url
+        self.links: list[tuple[str, str]] = []
+        self.href = ""
+        self.text: list[str] = []
+        self.ignored = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {"script", "style"}:
+            self.ignored += 1
+        elif tag == "a":
+            self.href = dict(attrs).get("href", "") or ""
+            self.text = []
+
+    def handle_data(self, data):
+        if self.href and not self.ignored:
+            self.text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag in {"script", "style"} and self.ignored:
+            self.ignored -= 1
+        elif tag == "a" and self.href:
+            url = urllib.parse.urljoin(self.page_url, self.href)
+            suffix = Path(urllib.parse.urlsplit(url).path).suffix.lower()
+            if suffix in _MATERIAL_SUFFIXES:
+                self.links.append((" ".join(" ".join(self.text).split()), url))
+            self.href = ""
+            self.text = []
+
+
+def _material_links(page: str, page_url: str) -> list[tuple[str, str]]:
+    parser = _MaterialLinks(page_url)
+    parser.feed(page)
+    unique = {}
+    for title, url in parser.links:
+        unique.setdefault(url, title)
+    return [(title, url) for url, title in unique.items()]
+
+
+def _course_lectures(page: str, class_id: str) -> list | None:
+    """Return the server-provided lecture list only for the requested class."""
+    match = re.search(
+        r'<script[^>]+id=["\']__NEXT_DATA__["\'][^>]*>(.*?)</script>',
+        page,
+        re.S | re.I,
+    )
+    if not match:
+        return None
+    try:
+        course = json.loads(match.group(1)).get("props", {}).get("pageProps", {}).get("course")
+    except (AttributeError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    if not isinstance(course, dict) or str(course.get("id")) != class_id:
+        return None
+    lectures = course.get("lectures")
+    return lectures if isinstance(lectures, list) else None
+
+
+def _allowed_asset_host(host: str | None, quera_host: str | None) -> bool:
+    if not host:
+        return False
+    normalized = host.lower().rstrip(".")
+    return normalized == (quera_host or "").lower().rstrip(".") or (
+        normalized == "dns-sut.s3.ir-central1.arvanstorage.ir"
+    )
+
+
 def _json_object(value: str) -> dict:
     try:
         result = json.loads(value)
@@ -528,6 +794,16 @@ def _valid_request(request: dict, connection: dict) -> bool:
         return (
             set(request) == {"scope", "class_ref"}
             and isinstance(class_ref, dict)
+            and class_ref.get("connection_id") == connection.get("id")
+            and isinstance(class_ref.get("class_id"), str)
+            and bool(class_ref["class_id"])
+        )
+    if request.get("scope") == "course_materials":
+        class_ref = request.get("class_ref")
+        return (
+            set(request) == {"scope", "class_ref"}
+            and isinstance(class_ref, dict)
+            and set(class_ref) == {"connection_id", "class_id"}
             and class_ref.get("connection_id") == connection.get("id")
             and isinstance(class_ref.get("class_id"), str)
             and bool(class_ref["class_id"])

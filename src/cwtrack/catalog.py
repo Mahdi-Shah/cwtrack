@@ -447,9 +447,37 @@ class Catalog:
                 "coverage": record.get("coverage"),
                 "last_attempt_at": record.get("last_attempt_at"),
                 "last_success_at": record.get("last_success_at"),
+                "last_success_coverage": record.get("last_success_coverage"),
                 "last_attempt_status": record.get("last_attempt_status"),
             })
         return records
+
+    def assignment_observations(self) -> list[dict]:
+        """Expose freshness per class without replacing the last complete data."""
+        if not self._root.is_dir():
+            return []
+        observations = []
+        for path in sorted(self._root.glob("*/assignments/*.json")):
+            record = json.loads(path.read_text(encoding="utf-8"))
+            connection = record.get("connection", {})
+            class_ref = record.get("class_ref", {})
+            if (
+                record.get("scope") != "assignments"
+                or not isinstance(connection.get("id"), str)
+                or not isinstance(class_ref, dict)
+            ):
+                raise ValueError("stored assignment observation is invalid: {}".format(path))
+            observations.append({
+                "connection_id": connection["id"],
+                "platform": connection.get("platform"),
+                "class_ref": class_ref,
+                "coverage": record.get("coverage"),
+                "last_attempt_at": record.get("last_attempt_at"),
+                "last_attempt_status": record.get("last_attempt_status"),
+                "last_success_at": record.get("last_success_at"),
+                "last_success_coverage": record.get("last_success_coverage"),
+            })
+        return observations
 
     def classes(self) -> list[dict]:
         """Read the last complete class observations for every connection."""

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -328,6 +329,75 @@ class TestCli:
     def test_gaps_runs_offline(self, store, capsys):
         assert self._run(["gaps", "--data", str(store)]) == 0
         assert "کل 6" in capsys.readouterr().out
+
+    def test_connect_prompts_for_hidden_password_and_saves_protected_cw_account(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        from cwtrack import access, cli
+
+        class MemoryVault:
+            def __init__(self):
+                self.values = {}
+
+            def put(self, key, value):
+                self.values[key] = value
+
+            def get(self, key):
+                return self.values.get(key)
+
+            def delete(self, key):
+                self.values.pop(key, None)
+
+        vault = MemoryVault()
+        monkeypatch.setattr(access, "default_vault", lambda _: vault)
+        monkeypatch.setattr("builtins.input", lambda prompt: "mahdi")
+        monkeypatch.setattr(cli.getpass, "getpass", lambda prompt: "private-password")
+        monkeypatch.setattr(cli.sys, "stdin", type("TTY", (), {"isatty": lambda self: True})())
+
+        code = cli.main(["connect", "--home", str(tmp_path / "home")])
+
+        output = capsys.readouterr().out
+        assert code == 0
+        assert list(vault.values.values()) == [{
+            "username": "mahdi", "password": "private-password"
+        }]
+        assert "private-password" not in output
+        assert "CW" in output
+
+    def test_connect_refuses_getpass_fallback_that_could_echo_password(
+        self, tmp_path, monkeypatch
+    ):
+        from cwtrack import access, cli
+
+        class MemoryVault:
+            def __init__(self):
+                self.values = {}
+
+            def put(self, key, value):
+                self.values[key] = value
+
+            def get(self, key):
+                return self.values.get(key)
+
+            def delete(self, key):
+                self.values.pop(key, None)
+
+        def fallback_getpass(prompt):
+            warnings.warn("echo fallback", cli.getpass.GetPassWarning)
+            return "visible-password"
+
+        vault = MemoryVault()
+        monkeypatch.setattr(access, "default_vault", lambda _: vault)
+        monkeypatch.setattr("builtins.input", lambda prompt: "mahdi")
+        monkeypatch.setattr(cli.getpass, "getpass", fallback_getpass)
+        monkeypatch.setattr(cli.sys, "stdin", type("TTY", (), {"isatty": lambda self: True})())
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("always")
+            with pytest.raises(CwError, match="مخفی رمز"):
+                cli.main(["connect", "--home", str(tmp_path / "home")])
+
+        assert vault.values == {}
 
     def test_missing_store_fails_loudly_not_with_zeroes(self, tmp_path, capsys):
         """'You have no assignments' and 'I could not find your data' are

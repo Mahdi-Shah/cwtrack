@@ -363,7 +363,7 @@ th{color:var(--muted);font-weight:700;font-size:var(--measure-11_5);background:#
 
 REVISION_CSS = """
 :root{
-  --ink:#172526; --ink-2:#425455; --muted:#718282; --faint:#9aa8a7;
+  --ink:#172526; --ink-2:#425455; --muted:var(--ink-2); --faint:var(--ink-2);
   --line:#dfe8e6; --line-2:#edf2f0; --bg:#f3f7f6; --card:var(--white);
   --accent:#12685b; --accent-soft:#e2f2ee; --overdue:#b33b32;
   --overdue-soft:#fbe9e7; --soon:#9a620b; --soon-soft:#fff2d9;
@@ -374,7 +374,7 @@ REVISION_CSS = """
 body{background:radial-gradient(ellipse at 88% 0,#e5f2ef 0,transparent 420px),var(--bg);padding-top:24px}
 .wrap{max-width:1180px}
 .top{align-items:center;gap:var(--measure-17);margin-bottom:var(--measure-14);padding:var(--measure-21) 24px;border:1px solid #d6e6e1;border-radius:var(--measure-22);background:linear-gradient(112deg,var(--white) 0%,#fafffe 58%,#e8f5f1 100%);box-shadow:var(--shadow)}
-.top .id{width:54px;height:54px;flex-basis:54px;border-radius:var(--measure-17);background:linear-gradient(145deg,#0e6a5b,#3c9b86);font-size:var(--measure-21);box-shadow:0 var(--measure-8) var(--measure-18) calc(0px - var(--measure-8)) rgba(18,104,91,.6)}
+.top .id{width:54px;height:54px;flex-basis:54px;border-radius:var(--measure-17);background:var(--accent-strong);font-size:var(--measure-21);box-shadow:0 var(--measure-8) var(--measure-18) calc(0px - var(--measure-8)) rgba(18,104,91,.6)}
 .top h1{font-size:25px;letter-spacing:-.035em}.top .meta{font-size:var(--measure-12);margin-top:var(--measure-5)}
 .eyebrow{margin:0 0 var(--measure-2);color:var(--accent);font-size:var(--measure-11);font-weight:800}
 .section-nav{display:flex;gap:var(--measure-8);flex-wrap:wrap;margin:0 0 var(--measure-20)}
@@ -382,7 +382,71 @@ body{background:radial-gradient(ellipse at 88% 0,#e5f2ef 0,transparent 420px),va
 .section-nav a:hover,.section-nav a:focus-visible{color:var(--accent);border-color:#a9cfc4;background:var(--accent-soft)}
 .section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:var(--measure-18);margin-bottom:var(--measure-14)}
 .section-heading .sec{margin-bottom:3px}.section-description{color:var(--muted);font-size:var(--measure-12);margin:0}
+.panel-disclosure{padding:0;overflow:hidden}
+.panel-disclosure>summary{display:flex;align-items:center;justify-content:space-between;gap:var(--measure-12);cursor:pointer;list-style:none}
+.panel-disclosure>summary::-webkit-details-marker{display:none}
+.panel-disclosure>summary:focus-visible,.assignment-card>summary:focus-visible,.resource-course-group>summary:focus-visible{outline:var(--measure-2) solid var(--accent);outline-offset:calc(0px - var(--measure-2))}
+.panel-disclosure>summary:hover,.assignment-card>summary:hover,.resource-course-group>summary:hover{background:#f7faf9}
+.collapse-hint{display:inline-flex;align-items:center;gap:var(--measure-6);flex:0 0 auto;color:var(--accent);font-size:var(--measure-10_5);font-weight:750;white-space:nowrap}
+.collapse-hint:before{content:'باز کردن'}
+[open]>.collapse-summary .collapse-hint:before,[open]>summary .collapse-hint:before{content:'جمع کردن'}
+.collapse-hint:after{content:'＋';font-size:var(--measure-13);line-height:1}
+[open]>.collapse-summary .collapse-hint:after,[open]>summary .collapse-hint:after{content:'−'}
+.panel-disclosure-body{padding:0 var(--measure-21) var(--measure-18)}
+.panel-disclosure:not([open]){padding-bottom:0}
+.panel-disclosure>.collapse-summary{padding:var(--measure-16) var(--measure-20)}
+.act>.collapse-summary{padding:var(--measure-15) var(--measure-20);border-bottom:1px solid var(--line-2);background:#fcfbf9}
+.act>.collapse-summary h2{font-size:16.5px;font-weight:800;margin:0;border:0;padding:0}
+.act>.collapse-summary .n{margin-inline-start:auto;color:var(--muted);font-size:12.5px;font-weight:600}
+.act>.collapse-summary .icon{flex:0 0 34px}
+.tl>.collapse-summary{padding:var(--measure-17) var(--measure-20) var(--measure-8)}
+.tl>.collapse-summary h2{margin:0}
+.tl>.panel-disclosure-body{padding:0 var(--measure-20) var(--measure-18)}
+.platform-panel.panel-disclosure>.section-heading{margin:0;padding:var(--measure-18) var(--measure-20)}
+.platform-panel.panel-disclosure[open]>.section-heading{border-bottom:1px solid var(--line-2)}
+.platform-panel.panel-disclosure>.section-heading .collapse-hint{align-self:center}
+.resource-course-panel.panel-disclosure>.resource-course-panel-head{margin:0;padding:var(--measure-19) var(--measure-21)}
+.resource-course-panel.panel-disclosure[open]>.resource-course-panel-head{border-bottom:1px solid var(--line-2)}
+.resource-course-group>summary{cursor:pointer;list-style:none}.resource-course-group>summary::-webkit-details-marker{display:none}
+.resource-course-group>summary .resource-course-count{margin-inline-start:auto}
+.resource-course-list{display:grid;padding:var(--measure-2) var(--measure-13) var(--measure-5)}
+.resource-library-link{margin:0 0 var(--measure-12);text-align:left}.resource-library-link a{display:inline-flex;align-items:center;gap:var(--measure-7);color:var(--accent);font-size:var(--measure-11);font-weight:800;text-decoration:none}.resource-library-link a:hover{text-decoration:underline}
+.assignment-card>summary{display:block;cursor:pointer;list-style:none}
+.assignment-card>summary::-webkit-details-marker{display:none}
+.assignment-card .assignment-head{align-items:center}
+.assignment-card .assignment-title-group h3{color:var(--ink)}
+.assignment-card .assignment-title-group .collapse-hint{margin-top:var(--measure-7)}
+.assignment-card>.assignment-body{padding-bottom:var(--measure-10)}
+.assignment-card[open] .assignment-head{background:#fff}
+.assignment-card>summary:focus-visible{outline-offset:calc(0px - var(--measure-3))}
 .platform-panel,.work-panel{background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:var(--measure-21) var(--measure-22);margin:0 0 var(--measure-20)}
+.platform-panel.panel-disclosure,.work-panel.panel-disclosure{padding:0}
+.stats-panel{margin:0 0 var(--measure-18);padding:0;border:1px solid var(--line);border-radius:var(--r);background:rgba(255,255,255,.78)}
+.stats-panel>summary,.course-inventory-section>summary{display:flex;align-items:center;justify-content:space-between;gap:var(--measure-12);padding:var(--measure-13) var(--measure-17);cursor:pointer;list-style:none}
+.stats-panel>summary::-webkit-details-marker,.course-inventory-section>summary::-webkit-details-marker,.course-group>summary::-webkit-details-marker{display:none}
+.stats-panel>summary:focus-visible,.course-inventory-section>summary:focus-visible,.course-group>summary:focus-visible{outline:var(--measure-2) solid var(--accent);outline-offset:calc(0px - var(--measure-2))}
+.stats-panel>summary:hover,.course-inventory-section>summary:hover,.course-group>summary:hover{background:var(--accent-soft)}
+.stats-panel>summary h2,.course-inventory-section>summary h3{margin:0;color:var(--ink);font-size:var(--measure-14);font-weight:850}
+.stats-panel .tiles{padding:0 var(--measure-13) var(--measure-13);margin-bottom:0}
+.course-inventory-section{margin:0 0 var(--measure-12);border:1px solid var(--line);border-radius:var(--measure-15);background:rgba(255,255,255,.74);overflow:hidden}
+.course-inventory-section>summary{border-bottom:1px solid transparent}
+.course-inventory-section[open]>summary{border-bottom-color:var(--line-2)}
+.course-inventory-section>summary h3{display:flex;align-items:center;gap:var(--measure-8)}
+.course-inventory-list{display:grid;gap:var(--measure-9);padding:var(--measure-12)}
+.course-group{min-width:0;border:1px solid var(--line);border-radius:var(--measure-13);background:var(--white);overflow:hidden}
+.course-group>summary{display:flex;align-items:center;justify-content:space-between;gap:var(--measure-12);padding:var(--measure-12) var(--measure-15);cursor:pointer;list-style:none}
+.course-group>summary span:first-child{display:grid;gap:var(--measure-2);min-width:0}
+.course-group>summary b{color:var(--ink);font-size:var(--measure-13);font-weight:850;overflow-wrap:anywhere}
+.course-group>summary small{color:var(--muted);font-size:var(--measure-10_5)}
+.course-group[open]>summary{border-bottom:1px solid var(--line-2);background:var(--line-2)}
+.course-group-body{display:grid;gap:var(--measure-9);padding:var(--measure-10)}
+.course-group-class{display:grid;gap:var(--measure-2);padding:var(--measure-9) var(--measure-11);border:1px solid var(--line-2);border-radius:var(--measure-10);background:var(--line-2);color:var(--ink-2);font-size:var(--measure-10_5)}
+.course-group-class span,.course-group-class small{color:var(--muted)}
+.course-group-class small{line-height:1.65;overflow-wrap:anywhere}
+.course-group-empty,.course-link-warning{margin:0;padding:var(--measure-9) var(--measure-11);border:1px solid var(--line);border-radius:var(--measure-10);background:var(--soon-soft);color:var(--ink-2);font-size:var(--measure-11)}
+.course-link-warning{background:var(--soon-soft);color:var(--soon)}
+.assignment-legacy-note{padding:var(--measure-7) var(--measure-10);border:1px solid var(--line);border-radius:var(--measure-9);background:#fbfaf5;color:var(--muted);font-size:var(--measure-10_5)}
+.course-group .assignment-card{margin:0}
 .assignment-search{flex:0 1 300px}.assignment-search input{width:100%;border:1px solid var(--line);border-radius:var(--measure-12);background:#f8fbfa;color:var(--ink);font:inherit;font-size:var(--measure-12);padding:var(--measure-9) var(--measure-12);outline:none}
 .assignment-search input:focus{border-color:var(--focus-border);box-shadow:0 0 0 3px rgba(18,104,91,.1)}
 .assignment-filters{display:flex;align-items:center;gap:var(--measure-7);flex-wrap:wrap;margin:var(--measure-14) 0 var(--measure-10)}
@@ -418,6 +482,7 @@ body{background:radial-gradient(ellipse at 88% 0,#e5f2ef 0,transparent 420px),va
 .platform-freshness{display:flex;align-items:center;gap:var(--measure-10) var(--measure-16);flex-wrap:wrap;border-top:1px solid var(--line-2);margin-top:var(--measure-13);padding-top:var(--measure-12);font-size:var(--measure-10)}
 .source-status{font-weight:800;color:var(--done)}.source-unavailable,.source-partial,.source-challenge_required,.source-needs_credentials{color:var(--soon)}.source-time{color:var(--muted)}
 .work-panel .sec{margin-bottom:var(--measure-12)}.work-card{background:var(--white);border:1px solid var(--line);border-radius:var(--measure-14);padding:var(--measure-14) var(--measure-16);margin-top:var(--measure-9)}
+.work-card>summary{cursor:pointer;list-style:none}.work-card>summary::-webkit-details-marker{display:none}.work-card[open] .work-card-head{margin-bottom:var(--measure-10)}
 .work-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:var(--measure-12)}.work-card .n{font-size:var(--measure-14);font-weight:800}
 .work-card .meta{color:var(--muted);font-size:var(--measure-11);margin-top:3px}.work-card .work-details{display:grid;gap:var(--measure-5);margin-top:var(--measure-10)}
 .work-card .work-detail{font-size:var(--measure-11);color:var(--ink-2);margin:0;overflow-wrap:anywhere}.work-card a{color:var(--accent);text-decoration:none;font-weight:700}.work-card a:hover{text-decoration:underline}
@@ -425,13 +490,16 @@ body{background:radial-gradient(ellipse at 88% 0,#e5f2ef 0,transparent 420px),va
 .visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:720px){
   body{padding:var(--measure-14) var(--measure-12) 42px}.top{padding:var(--measure-17) var(--measure-15);border-radius:var(--measure-17);align-items:flex-start}.top .id{width:44px;height:44px;flex-basis:44px;border-radius:var(--measure-14)}.top h1{font-size:var(--measure-20)}
-  .section-heading{align-items:stretch;flex-direction:column;gap:var(--measure-10)}.assignment-search{flex-basis:auto}.platform-panel,.work-panel{padding:var(--measure-16) var(--measure-13);border-radius:var(--measure-15)}
+  .section-heading{align-items:stretch;flex-direction:column;gap:var(--measure-10)}.assignment-search{flex-basis:auto}.platform-panel,.work-panel{padding:var(--measure-16) var(--measure-13);border-radius:var(--measure-15)}.panel-disclosure{padding:0}
   .assignment-head{grid-template-columns:1fr;gap:var(--measure-10);padding:var(--measure-13)}.deadline-box{grid-template-columns:auto 1fr auto;align-items:center}.status-grid{padding:var(--measure-11) var(--measure-13);gap:var(--measure-7)}
   .status-grid small{font-size:var(--measure-9)}.state-pill,.work-pill{font-size:9.5px;padding:3px var(--measure-7)}.assignment-foot{padding-inline:var(--measure-13)}
 }
 @media(max-width:440px){
   .top{gap:var(--measure-11)}.top .meta{font-size:var(--measure-10_5)}.status-grid{grid-template-columns:1fr 1fr}.status-grid>div:last-child{grid-column:1/-1}
   .filter-count{width:100%;margin:3px 0 0}.assignment-foot{align-items:flex-start;flex-direction:column}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
 @media print{
   body{background:var(--white)}.section-nav,.assignment-filters,.assignment-search,.assignment-open{display:none}
@@ -501,7 +569,7 @@ RESOURCE_CSS = """
 .resource-course-panel-head .eyebrow{display:flex;align-items:center;gap:var(--measure-7);margin-bottom:var(--measure-5);font-size:var(--measure-10);letter-spacing:.06em}
 .resource-course-panel-head .eyebrow:before{content:'';width:var(--measure-7);height:var(--measure-7);border-radius:50%;background:#2d927d;box-shadow:0 0 0 var(--measure-4) #dff1eb}
 .resource-course-panel-head h2{margin:0;color:#172c2b;font-size:23px;line-height:1.35;font-weight:900;letter-spacing:-.035em}
-.resource-course-panel-head p{margin:var(--measure-5) 0 0;color:#687a79;font-size:var(--measure-12)}
+.resource-course-panel-head p{margin:var(--measure-5) 0 0;color:var(--ink-2);font-size:var(--measure-12)}
 .resource-course-panel-actions{display:flex;align-items:center;gap:var(--measure-10);flex-wrap:wrap}
 .resource-course-panel-actions .count{font-size:var(--measure-11);font-weight:750;color:#435956;padding:var(--measure-8) var(--measure-12);border:1px solid #dce8e4;border-radius:var(--measure-12);background:var(--white);box-shadow:0 var(--measure-4) var(--measure-15) calc(0px - var(--measure-12)) rgba(18,73,63,.4)}
 .resource-course-panel-actions a{display:inline-flex;align-items:center;gap:var(--measure-8);padding:var(--measure-9) var(--measure-14);border:1px solid #175e53;border-radius:var(--measure-12);background:#175e53;color:var(--white);font-size:var(--measure-11);font-weight:850;text-decoration:none;white-space:nowrap;box-shadow:0 var(--measure-6) var(--measure-15) calc(0px - var(--measure-9)) rgba(18,104,91,.6);transition:transform .15s,background .15s}
@@ -514,7 +582,7 @@ RESOURCE_CSS = """
 .resource-course-icon{display:grid;place-items:center;width:var(--icon-size-large);height:var(--icon-size-large);flex:0 0 var(--icon-size-large);border:1px solid #d4e8e1;border-radius:var(--measure-15);background:var(--white);color:var(--accent-strong);font-size:var(--measure-18);font-weight:900;box-shadow:0 var(--measure-4) var(--measure-10) calc(0px - var(--measure-7)) rgba(18,104,91,.45)}
 .resource-course-name{min-width:0;flex:1}
 .resource-course-name h3{margin:0;color:#1a302f;font-size:var(--measure-15);line-height:1.5;font-weight:900;overflow-wrap:anywhere}
-.resource-course-name span{display:block;margin-top:3px;color:#6a7d7a;font-size:var(--measure-10_5)}
+.resource-course-name span{display:block;margin-top:3px;color:var(--ink-2);font-size:var(--measure-10_5)}
 .resource-course-count{padding:var(--measure-6) var(--measure-10);border:1px solid #dce8e4;border-radius:var(--measure-10);background:rgba(255,255,255,.86);color:#46625c;font-size:var(--measure-10);font-weight:850;white-space:nowrap}
 .resource-course-list{display:grid;padding:var(--measure-2) var(--measure-13) var(--measure-5)}
 .resource-course-item{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:var(--measure-12);align-items:center;min-width:0;padding:var(--measure-14) var(--measure-7);border:0;border-bottom:1px solid #edf2f0;border-radius:0;background:transparent}
@@ -525,7 +593,7 @@ RESOURCE_CSS = """
 .resource-course-item .resource-mark.folder{border-color:#eee4c8;background:linear-gradient(145deg,#fffdf6,#faf3df)}
 .resource-course-item-main{min-width:0}
 .resource-course-item-main h4{margin:0;color:#1c302e;font-size:var(--measure-13);line-height:1.6;font-weight:850;overflow-wrap:anywhere}
-.resource-course-item-main p{margin:3px 0 0;color:#768681;font-size:var(--measure-10_5);line-height:1.55}
+.resource-course-item-main p{margin:3px 0 0;color:var(--ink-2);font-size:var(--measure-10_5);line-height:1.55}
 .resource-course-targets{display:flex;gap:var(--measure-6);flex-wrap:wrap;margin-top:var(--measure-8)}
 .resource-course-target{display:inline-flex;align-items:center;gap:var(--measure-5);padding:var(--measure-4) var(--measure-8);border:1px solid #e5eeeb;border-radius:var(--measure-8);background:#f6faf8;color:#4c6560;font-size:var(--measure-10);line-height:1.5}
 .resource-course-item>a{align-self:center;display:inline-flex;align-items:center;gap:var(--measure-5);padding:var(--measure-7) var(--measure-10);border:1px solid #dbe8e4;border-radius:var(--measure-10);background:var(--white);color:var(--accent-strong);font-size:var(--measure-10);font-weight:850;text-decoration:none;white-space:nowrap;transition:background .15s,border-color .15s}
@@ -717,8 +785,9 @@ def timeline(items, now_epoch: int, horizon_days: int = 30) -> str:
 
     if not buckets:
         return (
-            "<section class='tl'><h2>خط زمانی ۳۰ روز آینده</h2>"
-            "<p class='sub'>مهلتی در این بازه پیدا نشد.</p></section>"
+            "<details class='tl panel-disclosure' open><summary class='collapse-summary'>"
+            "<h2>خط زمانی ۳۰ روز آینده</h2><span class='collapse-hint' aria-hidden='true'></span></summary>"
+            "<div class='panel-disclosure-body'><p class='sub'>مهلتی در این بازه پیدا نشد.</p></div></details>"
         )
 
     span = float(horizon_days)
@@ -749,10 +818,10 @@ def timeline(items, now_epoch: int, horizon_days: int = 30) -> str:
         )
 
     return (
-        "<section class='tl'><h2>خط زمانی ۳۰ روز آینده</h2>"
-        "<p class='sub'>{total} مورد مهلت‌دار در {days} روز · "
-        "راست = امروز، به چپ = دورتر</p>"
-        "<div class='rail'>{m}</div></section>"
+        "<details class='tl panel-disclosure' open><summary class='collapse-summary'>"
+        "<h2>خط زمانی ۳۰ روز آینده</h2><span class='collapse-hint' aria-hidden='true'></span></summary>"
+        "<div class='panel-disclosure-body'><p class='sub'>{total} مورد مهلت‌دار در {days} روز · "
+        "راست = امروز، به چپ = دورتر</p><div class='rail'>{m}</div></div></details>"
     ).format(total=total, days=len(buckets), m="".join(ticks))
 
 
@@ -762,10 +831,11 @@ def timeline(items, now_epoch: int, horizon_days: int = 30) -> str:
 def action_panel(items: list[dict], now_epoch: int) -> str:
     if not items:
         return (
-            "<section class='act calm'><header>"
-            "<div class='icon'>·</div><h2>اقدام نزدیکی ثبت نشده</h2></header>"
+            "<details class='act calm panel-disclosure' open><summary class='collapse-summary'>"
+            "<div class='icon'>·</div><h2>اقدام نزدیکی ثبت نشده</h2>"
+            "<span class='collapse-hint' aria-hidden='true'></span></summary>"
             "<div class='empty'>برای موعدهای گذشته و ۱۴ روز آینده، موردی برای اقدام در فهرست نیست.</div>"
-            "</section>"
+            "</details>"
         )
 
     urgent = [item for item in items if item["state"] == "todo" and item["regular_due"] is not None and item["regular_due"] < now_epoch]
@@ -793,9 +863,10 @@ def action_panel(items: list[dict], now_epoch: int) -> str:
         )
 
     return (
-        "<section class='act {lv}'><header>"
+        "<details class='act {lv} panel-disclosure' open><summary class='collapse-summary'>"
         "<div class='icon'>{ic}</div><h2>اقدام‌های نزدیک و وضعیت‌های نیازمند بررسی</h2>"
-        "<span class='n'>{n} مورد</span></header><ul>{rows}</ul></section>"
+        "<span class='n'>{n} مورد</span><span class='collapse-hint' aria-hidden='true'></span>"
+        "</summary><div class='panel-disclosure-body'><ul>{rows}</ul></div></details>"
     ).format(lv=level, ic=icon, n=len(items), rows="".join(rows))
 
 
@@ -830,7 +901,11 @@ def tiles(items: list[dict], now_epoch: int) -> str:
                 cls=cls, v=visual, n=value, l=label
             )
         )
-    return "<div class='tiles'>{}</div>".format("".join(cells))
+    return (
+        "<details class='stats-panel' open><summary><h2>نمای کلی وضعیت</h2>"
+        "<span class='collapse-hint' aria-hidden='true'></span></summary>"
+        "<div class='tiles'>{}</div></details>"
+    ).format("".join(cells))
 
 
 def course_card(c, materials: dict) -> str:
@@ -909,7 +984,7 @@ def course_card(c, materials: dict) -> str:
         "<div class='tags'>{tags}</div></div>"
         "{next}"
         "<span class='cnum num'>{done} از {total}</span>"
-        "<span class='chev'>›</span>"
+        "<span class='collapse-hint' aria-hidden='true'></span>"
         "</summary>"
         "<div class='cbody'>{mats}"
         "<table><thead><tr><th>وضعیت</th><th>باقی‌مانده</th><th>مهلت (متن سایت)</th>"
@@ -990,23 +1065,33 @@ def _due_epoch(value) -> int | None:
 
 
 def _legacy_platform_assignments(assignments: list, study: dict, refreshed: str) -> list[dict]:
-    """Adapt the original CW store into the same read model as connected platforms."""
-    connection_by_class = {
-        str(item.get("ref", {}).get("class_id")): item.get("ref", {}).get("connection_id")
-        for item in study.get("classes", [])
-        if item.get("platform") == "cw"
-    }
+    """Adapt legacy CW tasks, linking only a unique exact CW class identifier."""
+    classes_by_id: dict[str, list[dict]] = {}
+    for item in study.get("classes", []):
+        if (
+            item.get("platform") == "cw"
+            and item.get("observed_in_latest_class_list", True)
+        ):
+            classes_by_id.setdefault(str(item.get("ref", {}).get("class_id")), []).append(item)
     known = {
-        (str(item.get("class_ref", {}).get("class_id")), str(item.get("ref", {}).get("assignment_id")))
+        (
+            str(item.get("class_ref", {}).get("class_id")),
+            str(item.get("ref", {}).get("assignment_id")),
+        )
         for item in study.get("platform_assignments", [])
         if item.get("platform") == "cw"
     }
     rows = []
     for item in assignments:
         class_id, assignment_id = str(item.course_id), str(item.cmid)
-        if (class_id, assignment_id) in known:
+        matches = classes_by_id.get(class_id, [])
+        matched_class = matches[0] if len(matches) == 1 else None
+        if matched_class and (class_id, assignment_id) in known:
             continue
-        connection_id = connection_by_class.get(class_id) or "cw-legacy"
+        connection_id = (
+            matched_class.get("ref", {}).get("connection_id")
+            if matched_class else "cw-legacy"
+        )
         ref = {
             "connection_id": connection_id,
             "class_id": class_id,
@@ -1040,6 +1125,11 @@ def _legacy_platform_assignments(assignments: list, study: dict, refreshed: str)
             "last_success_at": refreshed or "",
             "legacy_course_id": item.course_id,
             "legacy_assignment_id": item.cmid,
+            "legacy_link_status": (
+                "linked" if matched_class
+                else "ambiguous" if len(matches) > 1
+                else "unmatched"
+            ),
         })
     return rows
 
@@ -1081,6 +1171,10 @@ def _dashboard_tasks(study: dict, now_epoch: int) -> list[dict]:
     """Build the one deduplicated assignment view used by dashboard summaries."""
     rows = []
     seen = set()
+    classes = {
+        (item.get("ref", {}).get("connection_id"), item.get("ref", {}).get("class_id")): item
+        for item in study.get("classes", [])
+    }
     for item in study.get("platform_assignments", []):
         ref = item.get("ref") or {}
         key = _task_key(ref)
@@ -1105,9 +1199,22 @@ def _dashboard_tasks(study: dict, now_epoch: int) -> list[dict]:
             item.get("platform", ""), item.get("submission", {}) or {}
         )[2]
         due = late_due if late_due and (regular_due is None or regular_due < now_epoch < late_due) else regular_due
+        class_ref = item.get("class_ref", {})
+        class_item = classes.get((
+            class_ref.get("connection_id"), class_ref.get("class_id")
+        ), {})
+        offering = class_item.get("offering") or {}
+        if offering.get("title"):
+            course = offering["title"]
+        elif class_item:
+            course = "کلاس بی‌نگاشت · {}".format(class_item.get("title") or "نام نامشخص")
+        elif item.get("legacy_link_status") in {"unmatched", "ambiguous"}:
+            course = "دادهٔ قدیمی CW · {}".format(item.get("course_title") or "درس بی‌نام")
+        else:
+            course = item.get("course_title") or "درس نامشخص"
         rows.append({
             "name": str(item.get("title") or "تکلیف بدون عنوان"),
-            "course": str(item.get("course_title") or "درس نامشخص"),
+            "course": str(course),
             "url": item.get("url") or "#",
             "state": state,
             "due": due,
@@ -1178,10 +1285,11 @@ def work_panel(items: list[dict], resources: dict | None = None) -> str:
                 )
             )
         cards.append(
-            "<article class='work-card' data-stage='{}'><div class='work-card-head'>"
+            "<details class='work-card' open data-stage='{}'><summary class='work-card-head'>"
             "<div><div class='n'>{}</div><div class='meta'>{}</div></div>"
-            "<span class='work-pill work-{}'>{}</span></div>"
-            "<div class='work-details'>{}</div></article>".format(
+            "<span class='work-pill work-{}'>{}</span>"
+            "<span class='collapse-hint' aria-hidden='true'></span></summary>"
+            "<div class='work-details'>{}</div></details>".format(
                 esc(item.get("stage") or "unknown"), name, esc(meta),
                 esc(item.get("stage") or "not_started"), esc(stage), "".join(details)
             )
@@ -1189,9 +1297,74 @@ def work_panel(items: list[dict], resources: dict | None = None) -> str:
     if not items:
         return ""
     return (
-        "<section class='work-panel' id='work-items'><h2 class='sec'>پیشرفت کار روی پاسخ "
-        "<span class='count'>{} کار</span></h2>{}</section>"
+        "<details class='work-panel panel-disclosure' id='work-items' open>"
+        "<summary class='collapse-summary'><h2 class='sec'>پیشرفت کار روی پاسخ "
+        "<span class='count'>{} کار</span></h2><span class='collapse-hint' aria-hidden='true'></span></summary>"
+        "<div class='panel-disclosure-body'>{}</div></details>"
     ).format(len(items), "".join(cards))
+
+
+def _class_group_key(item: dict) -> tuple:
+    ref = item.get("ref", {})
+    offering_id = (item.get("offering") or {}).get("id")
+    if offering_id:
+        return ("offering", offering_id)
+    return ("class", ref.get("connection_id"), ref.get("class_id"))
+
+
+def _assignment_freshness_index(study: dict) -> dict[tuple, dict]:
+    return {
+        (
+            item.get("class_ref", {}).get("connection_id"),
+            item.get("class_ref", {}).get("class_id"),
+        ): item
+        for item in study.get("assignment_observations", [])
+    }
+
+
+def _class_freshness_text(item: dict, freshness_by_class: dict[tuple, dict]) -> str:
+    ref = item.get("ref", {})
+    observation = freshness_by_class.get((ref.get("connection_id"), ref.get("class_id")))
+    if not observation:
+        return "تکلیف‌های این کلاس هنوز دریافت نشده‌اند."
+    status = observation.get("last_attempt_status") or "نامشخص"
+    coverage = observation.get("coverage") or "نامشخص"
+    if status == "ok" and coverage == "complete":
+        state = "آخرین تلاش کامل بود"
+    elif status == "unavailable":
+        state = "سامانه در آخرین تلاش در دسترس نبود"
+    elif status == "challenge_required":
+        state = "برای دریافت تازه ورود یا تأیید لازم است"
+    else:
+        state = "آخرین تلاش ناقص یا ناموفق بود"
+    last_attempt = observation.get("last_attempt_at") or "ثبت نشده"
+    last_success = observation.get("last_success_at")
+    success_text = (
+        "آخرین دریافت کامل: {}".format(last_success)
+        if last_success else "هنوز دریافت کامل موفقی ثبت نشده"
+    )
+    if last_success and observation.get("last_attempt_at") and last_success < observation["last_attempt_at"]:
+        state += "؛ دادهٔ قدیمیِ آخرین دریافت موفق نمایش داده می‌شود"
+    return "{} · آخرین تلاش: {} · {}".format(state, last_attempt, success_text)
+
+
+def _class_freshness_label(item: dict, freshness_by_class: dict[tuple, dict]) -> str:
+    ref = item.get("ref", {})
+    observation = freshness_by_class.get((ref.get("connection_id"), ref.get("class_id")))
+    if not observation:
+        return "دریافت تکلیف هنوز انجام نشده"
+    status = observation.get("last_attempt_status")
+    coverage = observation.get("coverage")
+    if status == "ok" and coverage == "complete":
+        label = "تلاش تکلیف کامل"
+    elif status == "unavailable":
+        label = "سامانه در تلاش تکلیف در دسترس نبود"
+    elif status == "challenge_required":
+        label = "ورود یا تأیید برای دریافت تکلیف لازم است"
+    else:
+        label = "تلاش تکلیف ناقص یا ناموفق"
+    last_success = observation.get("last_success_at")
+    return "{} · موفق: {}".format(label, last_success or "ثبت نشده")
 
 
 def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
@@ -1217,8 +1390,22 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
         and item.get("input", {}).get("course_id") is not None
         and item.get("input", {}).get("cmid") is not None
     }
-    labels = {"cw": "شارپ", "quera": "کوئرا"}
-    cards = []
+    labels = {"cw": "CW شریف", "quera": "کوئرا"}
+    freshness_by_class = _assignment_freshness_index(study)
+    groups = {}
+    for class_item in study.get("classes", []):
+        key = _class_group_key(class_item)
+        offering = class_item.get("offering") or {}
+        group = groups.setdefault(key, {
+            "kind": key[0],
+            "title": offering.get("title") or class_item.get("title") or "کلاس بدون عنوان",
+            "term": offering.get("term") or (class_item.get("tracking") or {}).get("term"),
+            "classes": [],
+            "cards": [],
+            "assignment_count": 0,
+        })
+        group["classes"].append(class_item)
+    card_count = 0
     assignments = sorted(
         study.get("platform_assignments", []),
         key=lambda item: _due_epoch(next(iter(item.get("deadlines", [])), {}).get("at"))
@@ -1232,6 +1419,32 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
             class_ref.get("connection_id"), class_ref.get("class_id")
         ), {})
         platform = assignment.get("platform", "")
+        legacy_status = assignment.get("legacy_link_status")
+        if legacy_status in {"unmatched", "ambiguous"}:
+            group_key = ("legacy", str(assignment.get("legacy_course_id") or class_ref.get("class_id")))
+            group = groups.setdefault(group_key, {
+                "kind": "legacy",
+                "title": assignment.get("course_title") or "دادهٔ قدیمی CW",
+                "term": None,
+                "classes": [],
+                "cards": [],
+                "assignment_count": 0,
+                "legacy_status": legacy_status,
+            })
+        elif class_item:
+            group_key = _class_group_key(class_item)
+            group = groups[group_key]
+        else:
+            group_key = ("legacy", str(class_ref.get("class_id") or "unknown"))
+            group = groups.setdefault(group_key, {
+                "kind": "legacy",
+                "title": assignment.get("course_title") or "دادهٔ قدیمی CW",
+                "term": None,
+                "classes": [],
+                "cards": [],
+                "assignment_count": 0,
+                "legacy_status": "unmatched",
+            })
         submission = assignment.get("submission", {}) or {}
         submission_label, submission_tone, submission_filter, submission_note = (
             _submission_presentation(platform, submission)
@@ -1269,7 +1482,10 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
         )
         work_tone = local_work.get("stage", "not_started") if local_work else "not_started"
         title = assignment.get("title") or "تکلیف بدون عنوان"
-        course = class_item.get("title") or assignment.get("course_title") or "درس نامشخص"
+        offering = class_item.get("offering") or {}
+        class_title = class_item.get("title") or assignment.get("course_title") or "کلاس نامشخص"
+        course = offering.get("title") or class_title
+        source = "{} · کلاس {}".format(labels.get(platform, platform or "سامانه"), class_title)
         url = assignment.get("url") or "#"
         deadline_html = (
             "<time class='assignment-date' data-local-date='{}'>{}</time>"
@@ -1291,14 +1507,20 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
             "<p class='assignment-relation'>{}</p>".format(esc(note))
             for note in relation_notes
         )
-        cards.append(
-            "<article class='assignment-card' data-title='{}' data-course='{}' "
+        if assignment.get("legacy_course_id") is not None:
+            relation_html += (
+                "<p class='assignment-legacy-note'>این ردیف از دادهٔ قدیمی CW آمده؛ "
+                "زمان زیر زمان همان مشاهدهٔ قدیمی است.</p>"
+            )
+        group["cards"].append(
+            "<details class='assignment-card' open data-title='{}' data-course='{}' "
             "data-platform='{}' data-submission='{}' data-due-epoch='{}'>"
-            "<div class='assignment-head'><div class='assignment-title-group'>"
+            "<summary class='assignment-head'><div class='assignment-title-group'>"
             "<span class='platform-badge'>{}</span>"
-            "<h3><a href='{}' target='_blank' rel='noreferrer'>{}</a></h3>"
-            "<p class='assignment-course'>{}</p></div>"
-            "<div class='deadline-box'><span>مهلت عادی</span>{}</div></div>"
+            "<h3>{}</h3>"
+             "<p class='assignment-course'>{} · {}</p><span class='collapse-hint' aria-hidden='true'></span></div>"
+            "<div class='deadline-box'><span>مهلت عادی</span>{}</div></summary>"
+            "<div class='assignment-body'>"
             "<div class='status-grid'>"
             "<div><small>وضعیت تحویل</small><span class='state-pill state-{}'>{}</span></div>"
             "<div><small>نتیجهٔ ارزیابی</small><span class='state-value'>{}</span></div>"
@@ -1306,15 +1528,17 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
             "</div>{}{}"
             "<div class='assignment-foot'><span>آخرین دریافت: <time data-local-date='{}'>{}</time></span>"
             "<a class='assignment-open' href='{}' target='_blank' rel='noreferrer'>"
-            "رفتن به تکلیف <span aria-hidden='true'>←</span></a></div></article>".format(
+            "رفتن به تکلیف <span aria-hidden='true'>←</span></a></div></div></details>".format(
                 esc(title), esc(course), esc(platform), submission_filter,
                 due_epoch if due_epoch is not None else "",
-                esc(labels.get(platform, platform or "سامانه")), esc(url), esc(title),
-                esc(course), deadline_html, submission_tone, esc(submission_label),
+                esc(labels.get(platform, platform or "سامانه")), esc(title),
+                esc(course), esc(source), deadline_html, submission_tone, esc(submission_label),
                 esc(evaluation_label), esc(work_tone), esc(work_stage), note_html,
                 relation_html, esc(freshness), esc(freshness), esc(url),
             )
         )
+        card_count += 1
+        group["assignment_count"] += 1
 
     connection_cards = []
     for connection in study.get("connections", []):
@@ -1337,38 +1561,122 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
                 esc(success), esc(success),
             )
         )
-    class_cards = []
     tracking_labels = {"current": "جاری", "archived": "بایگانی‌شده", "unknown": "نیم‌سال نامشخص"}
-    for item in study.get("classes", []):
-        offering = item.get("offering") or {}
-        tracking = item.get("tracking") or {}
-        course = offering.get("title") or "درس پیوند داده نشده"
-        term = offering.get("term") or tracking.get("term") or "ترم نامشخص"
-        state = tracking_labels.get(tracking.get("state"), "نیم‌سال نامشخص")
-        label = labels.get(item.get("platform"), item.get("platform", "سامانه"))
-        class_cards.append(
-            "<article class='platform-class'><div class='platform-class-name'>{}</div>"
-            "<div>{} · {} · <span class='tracking-state'>{}</span></div></article>".format(
-                esc(item.get("title") or "درس بدون عنوان"),
-                esc(label), esc(course), esc("{} · {}".format(term, state)),
-            )
+    mapped_groups, unlinked_groups, archived_groups, legacy_groups = [], [], [], []
+    for key, group in groups.items():
+        class_states = [
+            (item.get("tracking") or {}).get("state", "unknown")
+            for item in group["classes"]
+        ]
+        is_archived = (
+            key[0] == "offering"
+            and bool(group["classes"])
+            and all(state == "archived" for state in class_states)
+        ) or (
+            key[0] == "class"
+            and bool(class_states)
+            and class_states[0] == "archived"
+        ) or any(
+            (item.get("offering") or {}).get("archived")
+            for item in group["classes"]
         )
-    if not cards and not connection_cards and not class_cards:
+        class_rows = []
+        state_summary = []
+        for item in group["classes"]:
+            tracking = item.get("tracking") or {}
+            platform = labels.get(item.get("platform"), item.get("platform", "سامانه"))
+            state = tracking_labels.get(tracking.get("state"), "نیم‌سال نامشخص")
+            if state not in state_summary:
+                state_summary.append(state)
+            class_rows.append(
+                "<div class='course-group-class'><b>{}</b><span>{} · {}</span>"
+                "<small>{}</small></div>".format(
+                    esc(item.get("title") or "کلاس بدون عنوان"),
+                    esc(platform), esc(state),
+                    esc(_class_freshness_text(item, freshness_by_class)),
+                )
+            )
+        warning = ""
+        if group.get("kind") == "legacy":
+            warning_text = (
+                "شناسهٔ دادهٔ قدیمی با بیش از یک کلاس CW منطبق است؛ خودکار پیوند نخورد."
+                if group.get("legacy_status") == "ambiguous"
+                else "برای شناسهٔ دادهٔ قدیمی کلاس CW یکتایی پیدا نشد؛ داده جدا نگه داشته شد."
+            )
+            warning = "<p class='course-link-warning'>{}</p>".format(esc(warning_text))
+        if not group["cards"] and group["kind"] != "legacy":
+            no_tasks = (
+                "در دریافت کامل اخیر، تکلیفی برای این کلاس ثبت نشده است."
+                if any(
+                    freshness_by_class.get((
+                        item.get("ref", {}).get("connection_id"),
+                        item.get("ref", {}).get("class_id"),
+                    ), {}).get("last_success_coverage") == "complete"
+                    for item in group["classes"]
+                )
+                else "دادهٔ موفقی از تکلیف‌های این کلاس دریافت نشده است."
+            )
+            group["cards"].append("<p class='course-group-empty'>{}</p>".format(esc(no_tasks)))
+        term = " · {}".format(esc(group["term"])) if group.get("term") else ""
+        heading = group["title"]
+        if group["kind"] == "class":
+            heading = "کلاس بی‌نگاشت · {}".format(heading)
+        elif group["kind"] == "legacy":
+            heading = "دادهٔ قدیمیِ بی‌نگاشت · {}".format(heading)
+        freshness_summary = [
+            _class_freshness_label(item, freshness_by_class)
+            for item in group["classes"]
+        ]
+        summary_parts = state_summary + freshness_summary
+        states = " · {}".format(" · ".join(summary_parts)) if summary_parts else ""
+        rendered = (
+            "<details class='course-group'{}><summary><span><b>{}</b><small>{} تکلیف{}</small></span>"
+            "<span class='collapse-hint' aria-hidden='true'></span></summary>"
+            "<div class='course-group-body'>{}{}{} </div></details>"
+        ).format(
+            " open" if key[0] == "offering" and group["assignment_count"] else "",
+            esc(heading), group["assignment_count"], term + states,
+            "".join(class_rows), warning,
+            "".join(group["cards"]),
+        )
+        if group["kind"] == "legacy":
+            legacy_groups.append(rendered)
+        elif is_archived:
+            archived_groups.append(rendered)
+        elif group["kind"] == "class":
+            unlinked_groups.append(rendered)
+        else:
+            mapped_groups.append(rendered)
+
+    def course_section(title: str, items: list[str], section_id: str, *, open_by_default: bool = True) -> str:
+        if not items:
+            return ""
+        return (
+            "<details class='course-inventory-section' id='{}'{}><summary><h3>{} "
+            "<span class='count'>{} گروه</span></h3><span class='collapse-hint' aria-hidden='true'></span></summary>"
+            "<div class='course-inventory-list'>{}</div></details>"
+        ).format(
+            esc(section_id), " open" if open_by_default else "", esc(title),
+            len(items), "".join(items),
+        )
+
+    if not groups and not connection_cards:
         return ""
-    body = "".join(cards) or "<div class='empty'>در دریافت کامل اخیر تکلیفی دیده نشد.</div>"
-    class_details = (
-        "<details class='platform-classes'><summary>کلاس‌های متصل "
-        "<span class='count'>{} کلاس</span></summary><div class='platform-class-grid'>{}</div></details>"
-        .format(len(class_cards), "".join(class_cards))
-        if class_cards else ""
+    body = (
+        course_section("درس‌های نگاشت‌شده", mapped_groups, "mapped-courses")
+        + course_section("کلاس‌های بی‌نگاشت", unlinked_groups, "unlinked-classes")
+        + course_section("داده‌های قدیمی نیازمند تطبیق", legacy_groups, "unlinked-legacy")
+        + course_section("بایگانی", archived_groups, "archived-courses", open_by_default=False)
+        or "<div class='empty'>کلاسی در فهرست دریافت‌شده وجود ندارد.</div>"
     )
     return (
-        "<section class='platform-panel' id='platform-tasks'>"
-        "<div class='section-heading'><div><p class='eyebrow'>CW شریف و کوئرا</p>"
-        "<h2 class='sec'>تکالیف سامانه‌ها <span class='count'>{} تکلیف</span></h2>"
-        "<p class='section-description'>وضعیت تحویل، ارزیابی و پیشرفت پاسخ هرکدام جداگانه نمایش داده می‌شود.</p>"
-        "</div><label class='assignment-search'><span class='visually-hidden'>جست‌وجوی تکلیف</span>"
-        "<input id='assignment-search' type='search' placeholder='جست‌وجوی تکلیف یا درس' autocomplete='off'></label></div>"
+        "<details class='platform-panel panel-disclosure' id='platform-tasks' open>"
+        "<summary class='section-heading'><div><p class='eyebrow'>CW شریف و کوئرا</p>"
+        "<h2 class='sec'>درس‌ها و تکالیف <span class='count'>{} تکلیف</span></h2>"
+        "<p class='section-description'>کلاس‌های هم‌درس کنار هم هستند؛ تکلیف و منشأ هر کلاس جدا می‌ماند.</p>"
+        "</div><span class='collapse-hint' aria-hidden='true'></span></summary>"
+        "<div class='panel-disclosure-body'><label class='assignment-search'><span class='visually-hidden'>جست‌وجوی تکلیف</span>"
+        "<input id='assignment-search' type='search' placeholder='جست‌وجوی تکلیف یا درس' autocomplete='off'></label>"
         "<div class='assignment-filters' role='group' aria-label='فیلتر تکالیف'>"
         "<button type='button' data-assignment-filter='all' aria-pressed='true'>همه</button>"
         "<button type='button' data-assignment-filter='soon' aria-pressed='false'>مهلت نزدیک</button>"
@@ -1376,9 +1684,9 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
         "<button type='button' data-assignment-filter='submitted' aria-pressed='false'>ارسال‌شده‌ها</button>"
         "<span class='filter-count' id='assignment-count'>{} مورد</span></div>"
         "<div class='assignment-list'>{}</div><p class='no-matches' hidden>با این فیلتر تکلیفی پیدا نشد.</p>{}"
-        "<div class='platform-freshness'>{}</div></section>"
+        "<div class='platform-freshness'>{}</div></div></details>"
     ).format(
-        len(cards), len(cards), body, class_details, "".join(connection_cards)
+        card_count, card_count, body, "", "".join(connection_cards)
     )
 
 
@@ -1659,11 +1967,12 @@ def resource_panel(study: dict) -> str:
             if group.get("term") else "<span>منابع متصل</span>"
         )
         group_html.append(
-            "<section class='resource-course-group'><header class='resource-course-head'>"
+            "<details class='resource-course-group' open><summary class='resource-course-head'>"
             "<span class='resource-course-icon' aria-hidden='true'>▤</span>"
             "<div class='resource-course-name'><h3>{}</h3>{}</div>"
-            "<span class='resource-course-count'>{} منبع</span></header>"
-            "<div class='resource-course-list'>{}</div></section>".format(
+            "<span class='resource-course-count'>{} منبع</span>"
+            "<span class='collapse-hint' aria-hidden='true'></span></summary>"
+            "<div class='resource-course-list'>{}</div></details>".format(
                 esc(group["title"]), term, len(group["resources"]), "".join(items)
             )
         )
@@ -1676,12 +1985,12 @@ def resource_panel(study: dict) -> str:
         )
     )
     return (
-        "<section class='platform-panel resource-course-panel' id='course-resources'>"
-        "<div class='resource-course-panel-head'><div><p class='eyebrow'>کتابخانهٔ درس</p>"
+        "<details class='platform-panel resource-course-panel panel-disclosure' id='course-resources' open>"
+        "<summary class='resource-course-panel-head'><div><p class='eyebrow'>کتابخانهٔ درس</p>"
         "<h2>منابع هر درس</h2><p>منابع به تفکیک درس، همراه با تکلیف و محدودهٔ مرتبط.</p></div>"
-        "<div class='resource-course-panel-actions'><span class='count'>{} منبع · {} درس</span>"
-        "<a href='resources.html'>کتابخانهٔ کامل <span aria-hidden='true'>←</span></a></div></div>"
-        "{}</section>"
+        "<div class='resource-course-panel-actions'><span class='count'>{} منبع · {} درس</span></div>"
+        "<span class='collapse-hint' aria-hidden='true'></span></summary>"
+        "<div class='panel-disclosure-body'><p class='resource-library-link'><a href='resources.html'>کتابخانهٔ کامل <span aria-hidden='true'>←</span></a></p>{}</div></details>"
     ).format(resource_count, len(groups), contents)
 
 
@@ -1894,47 +2203,28 @@ def build(user: dict, assignments: list, gap: dict, now: datetime, now_epoch: in
                 len(unknown)
             )
         )
-    if has_course_data:
-        banners += (
-            "<div class='note'>درس‌هایی که «موردی پیدا نشد» دارند، در لحظهٔ آخرین بررسی "
-            "تکلیفی نداشتند — نه اینکه ثابت شده باشد تا آخر ترم تکلیفی نخواهند داشت. "
-            "هر چند هفته یک‌بار <code>cwtrack fetch</code> را دوباره اجرا کن.</div>"
-        )
-    else:
+    if not has_course_data and not (
+        study_view.get("classes") or study_view.get("connections") or assignments
+    ):
         banners += "<div class='note'>اطلاعات درس از سامانه در دسترس نیست</div>"
 
-    if assignments:
-        courses = "".join(course_card(c, materials) for c in gap["per_course"])
+    if dashboard_tasks or study_view.get("classes") or study_view.get("connections"):
         body = (
             "{banners}"
-            "{platforms}"
-            "{resources}"
-            "{work_panel}"
             "{actions}"
             "{timeline}"
             "{tiles}"
-            "<h2 class='sec' id='course-list'>درس‌ها <span class='count'>{nc} درس</span></h2>"
-            "{courses}"
+            "{platforms}"
+            "{resources}"
+            "{work_panel}"
         ).format(
             banners=banners,
-            platforms=platform_panel(dashboard_study, work_items),
-            resources=resource_panel(dashboard_study),
-            work_panel=work_panel(work_items, resource_titles),
             actions=action_panel(task_actions, now_epoch),
             timeline=timeline(task_timeline, now_epoch),
             tiles=tiles(dashboard_tasks, now_epoch),
-            nc=len(gap["per_course"]),
-            courses=courses,
-        )
-    elif dashboard_tasks or study_view.get("classes") or study_view.get("connections"):
-        body = (
-            banners
-            + action_panel(task_actions, now_epoch)
-            + timeline(task_timeline, now_epoch)
-            + tiles(dashboard_tasks, now_epoch)
-            + platform_panel(dashboard_study, work_items)
-            + resource_panel(dashboard_study)
-            + work_panel(work_items, resource_titles)
+            platforms=platform_panel(dashboard_study, work_items),
+            resources=resource_panel(dashboard_study),
+            work_panel=work_panel(work_items, resource_titles),
         )
     else:
         body = banners + resource_panel(dashboard_study) + work_panel(work_items, resource_titles) + (
@@ -1945,11 +2235,9 @@ def build(user: dict, assignments: list, gap: dict, now: datetime, now_epoch: in
 
     nav_items = []
     if platform_assignments or assignments or study_view.get("classes") or study_view.get("connections"):
-        nav_items.append("<a href='#platform-tasks'>تکالیف سامانه‌ها</a>")
+        nav_items.append("<a href='#platform-tasks'>درس‌ها و تکالیف</a>")
     if work_items:
         nav_items.append("<a href='#work-items'>پیشرفت پاسخ</a>")
-    if assignments:
-        nav_items.append("<a href='#course-list'>درس‌های شارپ</a>")
     nav_items.append(
         "<a class='resource-section-nav' href='#course-resources'>منابع هر درس</a>"
     )

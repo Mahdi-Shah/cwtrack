@@ -122,8 +122,12 @@ class Study:
             (item["class_ref"]["connection_id"], item["class_ref"]["class_id"]): item
             for item in tracking
         }
+        observed_refs = set()
         for item in classes:
             ref = item["ref"]
+            key = (ref["connection_id"], ref["class_id"])
+            observed_refs.add(key)
+            item["observed_in_latest_class_list"] = True
             offering = self._catalog.offering_for(ref)
             item["offering"] = (
                 {key: offering[key] for key in ("id", "title", "term", "archived")
@@ -135,10 +139,59 @@ class Study:
                 {key: tracking_item.get(key) for key in ("state", "term")}
                 if tracking_item else {"state": "unknown", "term": None}
             )
+        connections = self._catalog.connections()
+        platform_by_connection = {
+            item.get("connection_id"): item.get("platform") for item in connections
+        }
+        for tracking_item in tracking:
+            ref = tracking_item["class_ref"]
+            key = (ref["connection_id"], ref["class_id"])
+            if key in observed_refs:
+                continue
+            offering = self._catalog.offering_for(ref)
+            classes.append({
+                "kind": "class",
+                "ref": dict(ref),
+                "title": "کلاس در فهرست موفق اخیر دیده نشد",
+                "platform": platform_by_connection.get(ref["connection_id"], "unknown"),
+                "observed_in_latest_class_list": False,
+                "offering": (
+                    {field: offering[field] for field in ("id", "title", "term", "archived")
+                     if field in offering}
+                    if offering else None
+                ),
+                "tracking": {field: tracking_item.get(field) for field in ("state", "term")},
+            })
+        assignment_observations = self._catalog.assignment_observations()
+        visible_refs = {
+            (item.get("ref", {}).get("connection_id"), item.get("ref", {}).get("class_id"))
+            for item in classes
+        }
+        for observation in assignment_observations:
+            ref = observation["class_ref"]
+            key = (ref["connection_id"], ref["class_id"])
+            if key in visible_refs:
+                continue
+            offering = self._catalog.offering_for(ref)
+            classes.append({
+                "kind": "class",
+                "ref": dict(ref),
+                "title": "کلاس در فهرست موفق اخیر دیده نشد",
+                "platform": observation.get("platform", "unknown"),
+                "observed_in_latest_class_list": False,
+                "offering": (
+                    {field: offering[field] for field in ("id", "title", "term", "archived")
+                     if field in offering}
+                    if offering else None
+                ),
+                "tracking": {"state": "unknown", "term": None},
+            })
+            visible_refs.add(key)
         return {
             "classes": classes,
             "assignments": self._catalog.assignments(),
-            "connections": self._catalog.connections(),
+            "assignment_observations": assignment_observations,
+            "connections": connections,
             "offerings": offerings["offerings"],
             "catalog_revision": offerings["revision"],
             "class_tracking": tracking,
