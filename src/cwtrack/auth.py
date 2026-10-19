@@ -1,14 +1,8 @@
-"""Login, and the captcha.
+"""CW login with ten fresh Python OCR rounds before user continuation.
 
-cw.sharif.ir puts an image captcha (local_logincaptcha) on the login form. The
-image is saved and a human is asked to read it. It is not solved automatically - see
-SKILL.md for why. Everything here is read-only against the site.
-
-The login is a two-phase protocol because the reader may not be a person at a
-terminal. `submit()` returns a state and never blocks on stdin; the CLI turns a
-`captcha_required` into a prompt, and a skill turns it into an image it shows the
-user. Same code path, two callers, and neither can accidentally make the other wait
-on a keyboard.
+Login returns explicit states; only the terminal wrapper prompts. Failed OCR reads
+and rejected submissions use fresh images, while transport and credential errors
+stop the automatic rounds. Coursework observations remain read-only.
 """
 
 from __future__ import annotations
@@ -31,6 +25,7 @@ FAILED = "failed"
 #: 190x40 image and a zoomed viewer; past that, the person is squinting, not solving,
 #: and an unbounded loop against a login endpoint helps nobody.
 MAX_HUMAN_ATTEMPTS = 3
+MAX_OCR_ATTEMPTS = 10
 
 
 def ask(prompt: str) -> str:
@@ -184,89 +179,69 @@ def submit(
     }
 
 
-def _try_ocr(image: Path) -> dict | None:
-    """A confident reading, or None to ask the human.
-
-    Returns None for every reason that is not "the readings agreed" — OCR disabled, no
-    tesseract, an image that is not captcha-shaped, or too much disagreement. Keeping
-    the reasons collapsed to a single None is deliberate: this is a convenience, and a
-    convenience that can explain itself while prompting is a second thing to read.
-    """
+def _attempt_captcha(client, user, pw, base_dir, given=None, *, captcha_reader=None):
+    """Try Python OCR before returning a challenge for the user to read."""
     from . import captcha
 
-    try:
-        result = captcha.guess(image)
-    except Exception:  # noqa: BLE001 - never let a nicety break the login
-        return None
-    return result if result.get("ok") else None
+    state = submit(client, user, pw, base_dir, captcha=given)
+    if given or state["status"] != CAPTCHA_REQUIRED:
+        return state
+    reader = captcha_reader if captcha_reader is not None else captcha.guess
+    for attempt in range(1, MAX_OCR_ATTEMPTS + 1):
+        try:
+            guess = reader(state["image"]) or {"reason": "no_reading"}
+        except Exception:  # OCR failure must leave the manual continuation usable.
+            guess = {"reason": "error"}
+        if guess.get("reason") == "disabled":
+            return state
+        diagnostic = {
+            "read": guess.get("text", ""),
+            "agreement": guess.get("agreement", 0.0),
+            "reason": guess.get("reason", ""),
+            "attempts": attempt,
+            "limit": MAX_OCR_ATTEMPTS,
+        }
+        if not guess.get("ok", bool(guess.get("text"))):
+            if diagnostic["reason"] in {"no_reading", "low_agreement"}:
+                state = {
+                    "status": CAPTCHA_REQUIRED,
+                    **_fetch_captcha(client, base_dir),
+                    "message": "کپچای تازه را بخوان.",
+                }
+                state["ocr"] = diagnostic
+                continue
+            state["ocr"] = diagnostic
+            return state
+        state = submit(client, user, pw, base_dir, captcha=guess["text"])
+        if state["status"] not in (CAPTCHA_REQUIRED, CAPTCHA_REJECTED):
+            return state
+        diagnostic["reason"] = "rejected_by_site"
+        state["ocr"] = diagnostic
+    state["ocr"]["exhausted"] = True
+    state["message"] = "خواندن خودکار کپچا پس از ۱۰ دور موفق نشد؛ تصویر تازه را بخوان."
+    return state
 
 
 def do_login(client: Client, user: str, pw: str, base_dir: Path) -> None:
-    """The CLI's login: prompt for the captcha, then get in or explain why not.
-
-    A thin wrapper over submit(), so the human path and the skill path cannot drift
-    into two different notions of what a successful login is.
-    """
-    state = submit(client, user, pw, base_dir)
-
-    # The engine gets one go, not one per image. A captcha is a short random string,
-    # so a second identical-looking reading is very likely to be the same mistake; and
-    # a loop that retries until the site relents is exactly the failure mode this
-    # feature could inflict if the gate were removed. After one wrong guess the human
-    # answers every remaining round.
-    ocr_used = False
-    human_used = 0
-
-    # CAPTCHA_REJECTED is included on purpose: a rejection comes back with a fresh
-    # image, and the loop is what presents it and asks again. Exiting on a rejection
-    # instead is what made the first version give up after the engine's one miss.
-    while state["status"] in (CAPTCHA_REQUIRED, CAPTCHA_REJECTED):
-        shot = state["image"]
+    """Run Python OCR first, then allow up to three user responses."""
+    state = _attempt_captcha(client, user, pw, base_dir)
+    for _ in range(MAX_HUMAN_ATTEMPTS):
+        if state["status"] not in (CAPTCHA_REQUIRED, CAPTCHA_REJECTED):
+            break
         print(state["message"])
-        print("تصویر اینجا ذخیره شد، بازش کن: {}".format(shot.resolve()))
-        print("یا این صفحه را باز کن (بزرگ‌شده): {}".format(state["viewer"].resolve()))
-
-        # Optional, and measured. Five readings are voted on and only submitted when
-        # enough of them agree; captcha.py carries the numbers, which are deliberately
-        # modest — at the measured rate this answers roughly a quarter of logins and
-        # never answers one wrongly. Below the bar, or with CW_OCR=0, this is skipped
-        # and the prompt below happens exactly as it always did.
-        guessed = None if ocr_used else _try_ocr(shot)
-        if guessed:
-            ocr_used = True
-            print("خواندن پیشنهادی: {}  ({} از {} خواندن هم‌خوان؛ همین استفاده می‌شود)".format(
-                guessed["text"], guessed["votes"], guessed["total"]))
-            tried = submit(client, user, pw, base_dir, captcha=guessed["text"])
-            if tried["status"] == CAPTCHA_REJECTED:
-                print("پیشنهاد هم درست نبود. خودت بخوان — تصویر تازه بالا باز شد.")
-            state = tried
-            continue
-
+        print("تصویر اینجا ذخیره شد: {}".format(state["image"].resolve()))
+        print("تصویر بزرگ‌شده: {}".format(state["viewer"].resolve()))
         answer = ask("حروف/اعداد داخل تصویر را بنویس: ")
         if not answer:
             raise CwError("پاسخ کپچا خالی بود، لغو شد.")
-        human_used += 1
-        if human_used > MAX_HUMAN_ATTEMPTS:
-            # A person who has read a 190x40 captcha twice is not going to read it
-            # correctly on the fifth try. Stop, rather than looping against a login
-            # endpoint until they give up.
-            raise CwError(
-                "بعد از {} تلاش کپچا درست خوانده نشد. اگر رمز را از «فراموشی رمز» "
-                "عوض کرده‌ای، اول آن را امتحان کن.".format(human_used - 1)
-            )
         state = submit(client, user, pw, base_dir, captcha=answer)
 
     if state["status"] == OK:
         print("ورود موفق بود.")
         return
-
-    if state["status"] == CAPTCHA_REJECTED:
-        # submit() already downloaded a fresh image, so point at it rather than
-        # telling the user to start the whole command again.
-        print(state["message"])
-        print("تصویر جدید: {}".format(state["image"].resolve()))
-        raise CwError("پاسخ کپچا رد شد.")
-
+    if state["status"] in (CAPTCHA_REQUIRED, CAPTCHA_REJECTED):
+        print("تصویر جدید: {}".format(state["viewer"].resolve()))
+        raise CwError("بعد از سه پاسخ کاربر، کپچا پذیرفته نشد.")
     raise CwError(state.get("message") or "ورود ناموفق بود.")
 
 

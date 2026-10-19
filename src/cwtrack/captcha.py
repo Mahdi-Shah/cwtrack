@@ -1,7 +1,6 @@
 """Reading the login captcha, when it is asked for and the machine can be trusted.
 
-Default behaviour is unchanged: a human reads the captcha, because the captcha is the
-site stating that a person is at the keyboard. This module is an opt-in extra
+Python reads before a user is asked. This module is an optional extra
 (`pip install -e ".[ocr]"`, a tesseract binary on the machine) and it is measured, not
 assumed.
 
@@ -32,10 +31,9 @@ logins and never automates a wrong one. That is a modest win and the honest one;
 alternative, submitting the best guess every time, would look better in a demo and
 would loop on failures.
 
-The engine also gets **one attempt per login**, not one per image. A captcha is a
-short random string, so a second identical-looking reading is likely to be the same
-mistake — and an uncapped loop against a login endpoint is exactly the failure this
-feature could inflict on someone who installed it.
+This module reads one image. auth.py owns the ten-round login budget, obtains a
+fresh image after an unreadable or rejected CAPTCHA, and returns a user challenge
+when that budget is exhausted. The per-image agreement threshold stays unchanged.
 """
 
 from __future__ import annotations

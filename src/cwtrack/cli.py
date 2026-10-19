@@ -15,6 +15,7 @@ import getpass
 import json
 import os
 import sys
+import warnings
 from pathlib import Path
 
 from . import api
@@ -52,7 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
         "command",
         choices=[
             "fetch", "report", "open", "raw", "store", "ui", "gaps",
-            "material", "brief",
+            "material", "brief", "connect", "study",
         ],
     )
     ap.add_argument("--base", default=DEFAULT_BASE)
@@ -94,12 +95,162 @@ def emit(text: str, out: str = "") -> None:
         print(text)
 
 
+def _selection(items: list[dict], prompt: str, *, multiple: bool = False) -> list[dict] | None:
+    if not items:
+        print("موردی برای انتخاب وجود ندارد.")
+        return None
+    raw = input(prompt).strip()
+    if raw.casefold() in {"q", "لغو"}:
+        return None
+    try:
+        indexes = [int(part.strip()) for part in raw.split(",")]
+    except ValueError:
+        print("شمارهٔ انتخاب را وارد کن؛ برای لغو q بنویس.")
+        return None
+    if not multiple and len(indexes) != 1:
+        print("فقط یک شماره انتخاب کن.")
+        return None
+    if len(set(indexes)) != len(indexes) or any(index < 1 or index > len(items) for index in indexes):
+        print("شمارهٔ انتخاب‌شده در فهرست نیست یا تکراری است.")
+        return None
+    return [items[index - 1] for index in indexes]
+
+
+def _show_study_inventory(view: dict) -> None:
+    classes = view.get("classes", [])
+    if not classes:
+        print("فهرست کلاس‌های دریافت‌شده خالی است. ابتدا درس‌های سامانه را تازه‌سازی کن.")
+        return
+    state_labels = {"current": "جاری", "archived": "بایگانی‌شده", "unknown": "نامشخص"}
+    for index, item in enumerate(classes, 1):
+        offering = item.get("offering") or {}
+        tracking = item.get("tracking") or {}
+        platform = {"cw": "CW شریف", "quera": "کوئرا"}.get(item.get("platform"), item.get("platform", "سامانه"))
+        mapped = offering.get("title") or "بی‌نگاشت"
+        state = state_labels.get(tracking.get("state"), "نامشخص")
+        term = offering.get("term") or tracking.get("term") or "ترم نامشخص"
+        print("  [{}] {} · {} · {} · {} · {}".format(
+            index, platform, item.get("title") or "کلاس بدون عنوان", mapped, term, state
+        ))
+    print("شناسه‌های داخلی برای جلوگیری از اشتباه در انتخاب نمایش داده نمی‌شوند.")
+
+
+def _study_management(data: str) -> int:
+    if not sys.stdin.isatty():
+        raise CwError("مدیریت درس‌ها به ترمینال تعاملی نیاز دارد.")
+    while True:
+        view = api.study_view(data=data)
+        print("\nمدیریت کلاس‌ها و درس‌های نیم‌سال")
+        _show_study_inventory(view)
+        print("\n[1] پیوند کلاس به درس · [2] تغییر وضعیت نیم‌سال · [q] پایان")
+        action = input("انتخاب: ").strip().casefold()
+        if action in {"q", "quit", "خروج"}:
+            return 0
+        classes = view.get("classes", [])
+        revision = view.get("catalog_revision", 0)
+        if action == "1":
+            linkable_classes = [
+                item for item in classes
+                if item.get("observed_in_latest_class_list", True)
+            ]
+            print("برای نگاشت فقط کلاس‌های دیده‌شده در فهرست موفق اخیر را انتخاب کن:")
+            _show_study_inventory({"classes": linkable_classes})
+            selected = _selection(linkable_classes, "شمارهٔ کلاس‌ها برای پیوند (با ویرگول جدا کن): ", multiple=True)
+            if not selected:
+                continue
+            offerings = view.get("offerings", [])
+            print("درس‌های ثبت‌شده:")
+            for index, item in enumerate(offerings, 1):
+                suffix = " · {}".format(item.get("term")) if item.get("term") else ""
+                print("  [{}] {}{}".format(index, item.get("title", "درس بدون عنوان"), suffix))
+            print("  [0] ساخت درسِ نیم‌سال تازه")
+            choice = input("شمارهٔ درس: ").strip()
+            if choice == "0":
+                title = input("نام درس: ").strip()
+                term = input("نیم‌سال (اختیاری): ").strip()
+                if not title:
+                    print("نام درس نمی‌تواند خالی باشد.")
+                    continue
+                offering = {"title": title, "term": term}
+            else:
+                try:
+                    offering = offerings[int(choice) - 1]
+                except (ValueError, IndexError):
+                    print("شمارهٔ درس معتبر نیست.")
+                    continue
+                offering = {key: offering[key] for key in ("id", "title", "term") if key in offering}
+            result = api.course_link(
+                [item["ref"] for item in selected], offering,
+                expected_revision=revision, data=data,
+            )
+            if result.get("status") == "conflict":
+                answer = input("برخی کلاس‌ها به درس دیگری پیوند دارند. جایگزین شود؟ [y/N]: ").strip().casefold()
+                if answer not in {"y", "yes", "بله"}:
+                    print("پیوند قبلی حفظ شد.")
+                    continue
+                result = api.course_link(
+                    [item["ref"] for item in selected], offering,
+                    expected_revision=result.get("revision", revision),
+                    data=data, replace_existing=True,
+                )
+            print("نتیجهٔ پیوند: {}".format(result.get("status", "نامشخص")))
+        elif action == "2":
+            selected = _selection(classes, "شمارهٔ کلاس‌ها برای تغییر وضعیت (با ویرگول جدا کن): ", multiple=True)
+            if not selected:
+                continue
+            print("[1] جاری · [2] بایگانی‌شده · [3] نامشخص")
+            state_choice = input("وضعیت: ").strip()
+            state = {"1": "current", "2": "archived", "3": "unknown"}.get(state_choice)
+            if state is None:
+                print("وضعیت معتبر نیست.")
+                continue
+            new_term = input("نام نیم‌سال (Enter برای نگه‌داشتن مقدار فعلی): ").strip()
+            current_revision = revision
+            for item in selected:
+                old_tracking = item.get("tracking") or {}
+                old_offering = item.get("offering") or {}
+                term = new_term or old_tracking.get("term") or old_offering.get("term")
+                result = api.class_tracking(
+                    item["ref"], state, expected_revision=current_revision,
+                    term=term, data=data,
+                )
+                print("{}: {}".format(item.get("title") or "کلاس", result.get("status", "نامشخص")))
+                if result.get("status") != "ok":
+                    break
+                current_revision = result.get("revision", current_revision)
+        else:
+            print("انتخاب معتبر نیست.")
+
+
 def main(argv: list[str] | None = None) -> int:
     _force_utf8_streams()
     args = build_parser().parse_args(argv)
     base_dir = Path(args.home)
     dump = base_dir / "dump"
     client = Client(args.base)
+
+    if args.command == "connect":
+        if not sys.stdin.isatty():
+            raise CwError("برای گرفتن رمز به‌صورت مخفی، cwtrack را در ترمینال تعاملی اجرا کنید.")
+        username = ask("نام کاربری CW: ")
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", getpass.GetPassWarning)
+                password = getpass.getpass("رمز عبور CW (ورودی مخفی): ")
+        except getpass.GetPassWarning as exc:
+            raise CwError("ترمینال امکان گرفتن مخفی رمز را ندارد؛ اطلاعات ورود ذخیره نشد.") from exc
+        if not password:
+            raise CwError("رمز خالی است؛ اطلاعات ورود ذخیره نشد.")
+        result = api.access_configure(
+            "cw", {"username": username, "password": password}, home=base_dir
+        )
+        if result.get("status") != "ok":
+            raise CwError("اتصال CW ذخیره نشد: {}".format(result.get("status", "unavailable")))
+        print("اتصال CW در ذخیره‌ساز امن ویندوز ثبت شد.")
+        return 0
+
+    if args.command == "study":
+        return _study_management(args.data)
 
     if args.command == "raw":
         if not dump.is_dir():

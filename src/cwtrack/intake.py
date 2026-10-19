@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 import urllib.parse
 from html.parser import HTMLParser
 from pathlib import Path
+
+from .client import CwError
 
 _TEXT_SUFFIXES = {".txt", ".md", ".csv"}
 
@@ -50,6 +53,31 @@ class _AssignmentPage(HTMLParser):
     def handle_data(self, data: str):
         if not self._skip_depth:
             self.text.append(data)
+
+
+class _CourseResourcePage(HTMLParser):
+    """Extract labelled links from a Moodle course or resources page."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.links: list[tuple[str, str]] = []
+        self._href: str | None = None
+        self._label: list[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "a":
+            self._href = dict(attrs).get("href")
+            self._label = []
+
+    def handle_data(self, data):
+        if self._href is not None:
+            self._label.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == "a" and self._href is not None:
+            self.links.append((self._href, " ".join("".join(self._label).split())))
+            self._href = None
+            self._label = []
 
 
 def collect_site(cmid: int, assignment: dict, client, home: Path) -> dict:
@@ -115,6 +143,103 @@ def collect_site(cmid: int, assignment: dict, client, home: Path) -> dict:
         "status": "needs_input" if missing else "ok",
         "input": received,
         "open_questions": missing,
+    }
+
+
+def collect_course_materials(course_id: int, client, home: Path) -> dict:
+    """Download visible course files from the Moodle class and resources pages."""
+    base = urllib.parse.urlsplit(getattr(client, "base", "https://cw.sharif.ir"))
+    root = home / "course-materials" / str(course_id)
+    pages = [
+        ("/course/view.php", {"id": course_id}),
+        ("/course/resources.php", {"id": course_id}),
+    ]
+    links: dict[str, str] = {}
+    issues = []
+
+    def looks_like_login(page: str) -> bool:
+        lowered = page.lower()
+        return "login-form" in lowered or bool(
+            re.search(r'name=["\']password["\']', lowered)
+        )
+
+    def read_page(path: str, params: dict | None = None) -> str | None:
+        try:
+            page = client.get(path, params)
+        except (ConnectionError, TimeoutError, OSError, ValueError, CwError):
+            issues.append({"url": path, "status": "unavailable"})
+            return None
+        if looks_like_login(page):
+            issues.append({"url": path, "status": "authentication_required"})
+            return None
+        return page
+
+    for path, params in pages:
+        page = read_page(path, params)
+        if page is None:
+            continue
+        parsed = _CourseResourcePage()
+        parsed.feed(page)
+        for href, label in parsed.links:
+            url = urllib.parse.urlsplit(urllib.parse.urljoin(base.geturl(), href))
+            if url.scheme != base.scheme or url.hostname != base.hostname:
+                continue
+            if url.path.startswith("/pluginfile.php/"):
+                links.setdefault(url.geturl(), label)
+            elif url.path.startswith(("/mod/resource/view.php", "/mod/folder/view.php")):
+                detail = read_page(url.path, urllib.parse.parse_qs(url.query))
+                if detail is None:
+                    continue
+                detail_links = _CourseResourcePage()
+                detail_links.feed(detail)
+                for detail_href, detail_label in detail_links.links:
+                    target = urllib.parse.urlsplit(
+                        urllib.parse.urljoin(base.geturl(), detail_href)
+                    )
+                    if (
+                        target.scheme == base.scheme
+                        and target.hostname == base.hostname
+                        and target.path.startswith("/pluginfile.php/")
+                    ):
+                        links.setdefault(
+                            target.geturl(), detail_label or label
+                        )
+
+    materials = []
+    for address, label in links.items():
+        url = urllib.parse.urlsplit(address)
+        filename = Path(urllib.parse.unquote(url.path)).name
+        if not filename or filename in {".", ".."}:
+            issues.append({"url": address, "status": "invalid_filename"})
+            continue
+        try:
+            content = client.get_bytes(url.path, urllib.parse.parse_qs(url.query) or None)
+        except (ConnectionError, TimeoutError, OSError, ValueError, CwError):
+            issues.append({"url": address, "status": "download_failed"})
+            continue
+        if looks_like_login(content[:4096].decode("utf-8", "replace")):
+            issues.append({"url": address, "status": "authentication_required"})
+            continue
+        root.mkdir(parents=True, exist_ok=True)
+        target = root / filename
+        if target.exists() and target.read_bytes() != content:
+            digest = hashlib.sha256(address.encode("utf-8")).hexdigest()[:10]
+            target = root / (target.stem + "-" + digest + target.suffix)
+        temporary = target.with_name(target.name + ".tmp")
+        temporary.write_bytes(content)
+        os.replace(temporary, target)
+        materials.append({
+            "title": label or filename,
+            "url": address,
+            "path": str(target.resolve()),
+            "role": "material",
+        })
+
+    return {
+        "status": "ok" if not issues else "partial",
+        "course_materials": materials,
+        "coverage": "complete" if not issues else "incomplete",
+        "issues": issues,
     }
 
 

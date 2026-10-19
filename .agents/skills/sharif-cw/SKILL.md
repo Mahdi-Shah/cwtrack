@@ -1,6 +1,6 @@
 ---
 name: sharif-cw
-description: 'Tracks the user''s CW coursework and Quera classes and assignment lists, supplementary course resources, durable solution revisions and verification evidence through Codex. Use when the user asks what is due, what is late, to start, continue, revise or solve coursework, or to see progress — "تکالیفم را بررسی کن", "تکالیف کوئرا", "چیزی از قلم افتاده؟", "کدام تکلیف تحویل نشده", "مهلت‌ها کی است", "تکلیفمو حل کن", "ادامهٔ تکلیفم", "منبع این درس را اضافه کن". The user speaks; you call the API. Credentials are supplied by the user and saved in Windows-protected storage. CW captcha OCR may need the user to read an image; the user supplies OTPs. Quera assignment listing has offline fixture coverage but needs live account acceptance; assignment prompt/attachment retrieval and interactive CAPTCHA continuation remain incomplete.'
+description: 'Tracks the user''s CW coursework and Quera assignments, checks connected course materials across both platforms, and manages durable solution revisions and verification evidence. Use when the user asks what is due, what is late, to start, continue, revise or solve coursework, or to see progress — "تکالیفم را بررسی کن", "تکالیف کوئرا", "چیزی از قلم افتاده؟", "کدام تکلیف تحویل نشده", "مهلت‌ها کی است", "تکلیفمو حل کن", "ادامهٔ تکلیفم", "منبع این درس را اضافه کن". The user speaks; you call the API. Credentials are supplied by the user and saved in Windows-protected storage. CW captcha OCR may need the user to read an image; the user supplies OTPs. Quera listing/detail and CW course-resource retrieval have offline fixture coverage; live account acceptance and interactive CAPTCHA continuation remain incomplete.'
 ---
 
 # Sharif courseware (cw.sharif.ir)
@@ -104,9 +104,28 @@ When the assignment is listed in `api.study_view()["platform_assignments"]`, use
 exact `ref` with `api.study_prepare({"task_ref": ref})`. This is the shared CW/Quera
 path: it retrieves the selected prompt, creates or resumes the stable work record, and
 returns resources bound to both that exact task and its explicitly linked course
-offering. Read the returned resource snapshots before solving. Use the older CW `cmid`
-path below for legacy-only course stores or when the shared connection inventory is not
-available.
+offering. It also returns `course_sources`, one result per connected platform source.
+Inspect these results and their coverage before solving; an overall `ok` does not mean
+an unlinked or unchecked source was searched. A linked CW offering is queried for its
+visible course-page and resources-list files; downloaded files are registered to the
+offering and captured as immutable resources.
+
+If a source reports `link_required`, compare the target class and candidates using an
+exact course code when both expose one, and confirm the same term. If the code is absent,
+link only when the course identity and term are otherwise clear and unique. Use
+`api.course_link([target_class_ref, candidate_ref], offering, expected_revision=...)`
+to persist that confirmed relationship, then run `study_prepare` again. If several
+candidates remain or the term is unclear, ask the student once and keep preparation
+`partial` until they identify the class. Never link classes from a similar name alone.
+
+Treat `not_configured`, `needs_refresh`, `link_required`, `no_candidate`, and
+`local_library_only` as distinct outcomes. A `no_candidate` result only says the last
+complete class inventory had no match; it does not prove the course has no resources.
+If CW reports `challenge_required`, continue that exact operation with
+`api.study_continue()` and then retry preparation. Report incomplete or unavailable
+coverage per source; do not collapse it into “no materials found.” Read the returned
+resource snapshots before solving. Use the older CW `cmid` path below for legacy-only
+course stores or when the shared connection inventory is not available.
 
 For a site assignment, call `api.collect_assignment({"site": {"cmid": id}})`. The
 assignment must already be in the local store. Handle `needs_credentials`,
@@ -159,14 +178,13 @@ the older brief-only workflow.
 
 ## Quera and supplementary course resources
 
-Quera's current adapter can authenticate, discover class links and read an assignment
-list from the authenticated course page's server-rendered array. It accepts the list
-only when the page identity matches the selected class and any supplied assignment
-count agrees. Submission state and grades remain unknown. This parser has offline
-fixture coverage but no live account acceptance; it does not yet retrieve assignment
-prompts or attachments. If refresh is incomplete, say so rather than saying there is no
-homework. For assignment work, use an exact opaque `assignment_ref` and the received
-prompt with the same durable workflow:
+Quera's current adapter can authenticate, discover class links, read an assignment list,
+retrieve the selected prompt and downloadable attachments, and inspect visible course
+material links. Submission state and grades remain unknown. These paths have offline
+fixture coverage; live account acceptance and interactive CAPTCHA continuation are
+still unverified. If refresh or detail retrieval is incomplete, report that state
+rather than saying there is no homework. For assignment work, use an exact opaque
+`assignment_ref` and the received prompt with the same durable workflow:
 
 ```python
 prepared = api.study_prepare({"received": {
@@ -193,8 +211,16 @@ This annotation never merges their work IDs, submission states or checks. A prio
 answer may serve as a draft only after mapping the new task's requirements; rerun the
 new task's checks and preserve its own delivery history.
 
-When the user asks to connect an account, pass the supplied values directly to the API
-and keep them out of summaries, logs, shell commands and returned prose:
+For a CW account connection, use the interactive terminal command `cwtrack connect`.
+It asks for the username and reads the password with hidden terminal input, then stores
+the account through `api.access_configure("cw", credentials)` in the Windows DPAPI
+vault. Open a visible Codex terminal and start the command for the user; never ask the
+user to put a CW password in chat, a command argument, or an environment variable for
+this shared connection. Continue the coursework refresh after the command succeeds.
+
+When the user asks to connect another account and supplies its values, pass the
+supplied values directly to the API and keep them out of summaries, logs, shell
+commands and returned prose:
 
 ```python
 connection = api.access_configure("quera", credentials)
@@ -233,74 +259,47 @@ parts and extent through `work_save(resource_uses=...)`, and let the API validat
 snapshot hash and binding. Course official material and assignment constraints take
 precedence over supplements. Use a resource only within the captured extent.
 
-## The CW captcha — when OCR needs a human
+## CW CAPTCHA: Python first, then the user
 
-`api.refresh()` logs in and downloads. cw.sharif.ir puts an image captcha
-(`local_logincaptcha`) on the login form, so the first call returns:
+`api.study_refresh()` runs Python OCR for up to **10 fresh CAPTCHA rounds** per login.
+It stops immediately on success. Each round runs the existing ensemble on one image;
+its multiple Tesseract readings count as one round. A low-agreement reading is not
+submitted: Python downloads a fresh image for the next round. A rejected submission
+continues with the fresh image already returned by the site. The same policy applies
+to legacy `api.refresh()` and terminal `auth.do_login()`.
 
-```python
-{"status": "captcha_required", "image": Path, "viewer": Path, ...}
-```
+Let Python perform these rounds. Model vision is not the user's requested automatic
+reader. When a shared refresh returns a `readable_code` action:
 
-1. Show `viewer` to the user — it is the captcha at 4×, because the site's own image
-   is about 190×40 px and genuinely hard to read. Use the preview/preview-file tool on
-   that path. Showing `image` directly wastes round trips.
-2. Ask what it says.
-3. Call `api.refresh(captcha="<their answer>")`.
+1. Inspect `challenge.display.ocr`: `attempts`, `limit`, `exhausted`, and `reason`.
+   After ten unsuccessful rounds, `exhausted` is true. `read` describes the previous
+   attempted image; it is not a proposed answer to the fresh image.
+2. Show `challenge.display.viewer` to the user at its enlarged size and ask for the
+   characters. If the viewer cannot be displayed, show the image enlarged.
+3. Resume the exact operation with
+   `api.study_continue(continuation_id, {"kind": "readable_code", "value": answer})`.
+   Handle any new challenge returned by that continuation. Restarting refresh would
+   start a new automatic budget instead of continuing the user's response.
+4. Report coursework only after checking the continuation's refresh result. Successful
+   login does not prove that classes or assignments were retrieved.
 
-If it comes back `captcha_rejected`, a **new** image was already downloaded in the
-response — show that `viewer` and try again. Do not restart from scratch.
+For legacy `api.refresh()`, the returned `captcha_required` or `captcha_rejected`
+state carries `image`, `viewer`, and `ocr` directly. Resume with `captcha=answer`;
+an explicit answer bypasses OCR rather than restarting its budget. The terminal
+allows at most three user answers after the automatic rounds.
+Existing `CW_USER` / `CW_PASS` configuration remains a legacy input. For the shared
+account, use the protected interactive `cwtrack connect` flow described above.
 
-**You will usually not get this far.** `api.refresh()` tries to read the captcha itself
-before it asks you, when tesseract and the `ocr` extra are installed. It reads the
-image five ways and submits only when at least 70% of the readings agree; measured on
-20 generated samples that automated 5 of 20 logins and got all 5 right. Otherwise it
-returns `captcha_required` exactly as above and you show the image.
+`CW_OCR=0` deliberately disables automatic reading. Missing Tesseract/Pillow, corrupt
+images, or engine errors are reported as technical failures, not ten completed OCR
+rounds. Check and report that cause instead of repeatedly invoking a broken engine.
+Credentials failures and network errors also stop the automatic loop. Keep the OCR
+extra optional and credentials in their protected connection flow.
 
-When it does try, the state tells you what happened:
-
-| `result["status"]` | `result["ocr"]` | What to do |
-| --- | --- | --- |
-| `ok` | absent | It worked. Say so and carry on. |
-| `captcha_rejected` | `{reason: "rejected_by_site", ...}` | It read it confidently and was wrong. Show the new `viewer` and ask the user. Say the reading failed — otherwise a wrong guess looks like a wrong password. |
-| `captcha_required` | `{reason: "low_agreement", ...}` | The readings disagreed. Show `viewer`, and mention the tentative reading in `ocr["read"]` so the user can check it quickly. |
-
-The engine gets **one attempt per login**, never one per image. If it has already been
-used, `ocr` is absent and the user answers every remaining round. Up to three human
-attempts are made, then it stops — after that they are squinting, not solving.
-
-`CW_OCR=0` turns it off completely. Nothing above changes; the image is simply shown
-from the start.
-
-`captcha_rejected` after two or three good reads usually means it is not the captcha
-any more. Check whether the password was reset via *forgot password*; cw.sharif.ir
-currently asks every user to do that, and it looks exactly like a credentials failure.
-
-`{"status": "needs_credentials"}` means `CW_USER` and `CW_PASS` are not set in the
-environment. Ask the user to set them, or offer to take a username and password as
-arguments. Never put a password in a command line — argv lands in shell history.
-
-### Where the line is
-
-The owner has decided the OCR goes in, on the record, and it is shipped as a measured
-and gated convenience rather than a silent override. What that means for you:
-
-- **Do not improve it.** No better preprocessing, no higher-agreement mode, no
-  retry-until-it-works. The 70% gate is where the accuracy stops being free; raising it
-  buys a higher submit rate by submitting wrong answers, and the whole point of the
-  measurement was that it does not.
-- **Never submit a reading the user did not give you and the readings did not agree
-  on.** A confident wrong captcha looks exactly like a wrong password from the outside.
-- **Never call the engine twice for one login.** One attempt per login, then the human.
-- **Keep it optional.** `CW_OCR=0` and the absent `ocr` extra must both keep the human
-  path working exactly as it did. If a change breaks either, it is wrong.
-- The captcha is the site's statement that a person is at the keyboard. This feature
-  answers one round of it when the machine is measurably sure, and the person still
-  answers the rest. Keep it that size; do not grow it.
-
-The `viewer` page exists so the human step costs one round trip instead of several.
-That is the design answer to a captcha, and the OCR is the answer to the *typing*, not
-to the reading.
+The ensemble still requires 70% agreement before automatic submission. Its historical
+20-sample measurement concerns individual images; it does not establish the success
+rate of ten-round live logins. The student's clarified policy is recorded in
+[the CW connection design](../../../docs/cw-account-connection.md).
 
 ## The store
 

@@ -537,7 +537,7 @@ class TestTheDashboard:
         assert "id='platform-tasks'" in page
         assert "data-platform='cw'" in page
         assert assignment.name in page
-        assert "درس‌های شارپ" in page
+        assert assignment.course in page
 
     def test_it_shows_platform_assignments_freshness_and_supplementary_resources(
         self, store, tmp_path
@@ -952,6 +952,64 @@ def test_configured_platform_account_flows_through_secure_refresh_into_shared_vi
     assert "private" not in repr(view)
 
 
+def test_refresh_reports_missing_explicit_cw_account_without_dropping_quera(
+    tmp_path, monkeypatch
+):
+    class MemoryVault:
+        def __init__(self):
+            self.values = {}
+
+        def put(self, key, value):
+            self.values[key] = value
+
+        def get(self, key):
+            return self.values.get(key)
+
+        def delete(self, key):
+            self.values.pop(key, None)
+
+    class QueraAdapter:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def observe(self, request, context):
+            assert request["scope"] == "classes"
+            return {
+                "status": "ok",
+                "observation": {
+                    "status": "ok",
+                    "scope": "classes",
+                    "coverage": "complete",
+                    "nodes": [],
+                },
+                "private_state": {"authenticated": True},
+            }
+
+        def resume(self, private_state, response):
+            raise AssertionError("no challenge expected")
+
+    vault = MemoryVault()
+    monkeypatch.setattr(api.access_store, "default_vault", lambda _: vault)
+    monkeypatch.setattr(api, "_platform_adapters", lambda _: {"quera": QueraAdapter})
+    connected = api.access_configure(
+        "quera", {"username": "student", "password": "private"},
+        home=tmp_path / "home",
+    )
+
+    refreshed = api.study_refresh(
+        platforms=["cw", "quera"], data=tmp_path / "data", home=tmp_path / "home"
+    )
+    targets = {item["platform"]: item for item in refreshed["targets"]}
+
+    assert refreshed["status"] == "partial"
+    assert targets["cw"]["status"] == "needs_credentials"
+    assert targets["quera"] == {
+        "connection_id": connected["connection_id"],
+        "platform": "quera",
+        "status": "ok",
+    }
+
+
 def test_public_api_rotates_protected_credentials_without_returning_them(
     tmp_path, monkeypatch
 ):
@@ -1044,6 +1102,18 @@ def test_explicit_platform_selection_prepares_and_resumes_one_stable_work_item(
                     "deadlines": [],
                 }]
                 scope = "assignments"
+            elif request["scope"] == "course_materials":
+                return {
+                    "status": "ok",
+                    "observation": {
+                        "status": "ok",
+                        "scope": "course_materials",
+                        "coverage": "complete",
+                        "course_materials": [],
+                        "course_materials_issues": [],
+                    },
+                    "private_state": {"authenticated": True},
+                }
             else:
                 return {
                     "status": "ok",
@@ -1144,6 +1214,8 @@ def test_received_quera_assignment_resumes_with_task_resources(tmp_path):
     )
     course_notes = tmp_path / "course-reference.md"
     course_notes.write_text("مبانی پایگاه داده", encoding="utf-8")
+    fetched_notes = tmp_path / "fetched-course-notes.pdf"
+    fetched_notes.write_bytes(b"course material bytes")
     course_resource = api.resource_attach(
         {"title": "منبع درس", "location": {"kind": "file", "path": str(course_notes)}},
         to={"offering_id": linked["offering"]["id"]},
@@ -1158,6 +1230,12 @@ def test_received_quera_assignment_resumes_with_task_resources(tmp_path):
         "title": "تمرین کوئرا",
         "prompt": "کلید خارجی را توضیح دهید.",
         "attachments": [],
+        "course_materials": [{
+            "title": "جزوهٔ دریافت‌شده",
+            "url": "https://quera.org/course/materials/database.pdf",
+            "path": str(fetched_notes),
+            "role": "material",
+        }],
     }
 
     first = api.study_prepare({"received": received}, data=data, work=work)
@@ -1169,8 +1247,420 @@ def test_received_quera_assignment_resumes_with_task_resources(tmp_path):
     assert resumed["status"] == "exists"
     assert first["work"]["work_id"] == resumed["work"]["work_id"]
     assert {item["id"] for item in first["resources"]["resources"]} == {
-        attached["resource_id"], course_resource["resource_id"]
+        attached["resource_id"], course_resource["resource_id"],
+        next(
+            item["id"] for item in first["resources"]["resources"]
+            if item["title"] == "جزوهٔ دریافت‌شده"
+        ),
     }
+    assert sum(
+        item["title"] == "جزوهٔ دریافت‌شده" for item in resumed["resources"]["resources"]
+    ) == 1
+
+
+def test_study_prepare_selected_quera_task_keeps_prompt_files_and_course_materials(
+    tmp_path, monkeypatch
+):
+    class MemoryVault:
+        def __init__(self):
+            self.values = {}
+
+        def put(self, key, value):
+            self.values[key] = value
+
+        def get(self, key):
+            return self.values.get(key)
+
+        def delete(self, key):
+            self.values.pop(key, None)
+
+    prompt_image = tmp_path / "diagram.png"
+    prompt_pdf = tmp_path / "prompt.pdf"
+    course_pdf = tmp_path / "notes.pdf"
+    prompt_image.write_bytes(b"prompt image")
+    prompt_pdf.write_bytes(b"prompt pdf")
+    course_pdf.write_bytes(b"course notes")
+
+    class Adapter:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def observe(self, request, context):
+            if request["scope"] == "classes":
+                scope = "classes"
+                nodes = [{
+                    "kind": "class",
+                    "ref": {"connection_id": self.connection["id"], "class_id": "db101"},
+                    "title": "پایگاه داده",
+                }]
+            elif request["scope"] == "assignments":
+                scope = "assignments"
+                nodes = [{
+                    "kind": "assignment",
+                    "ref": {**request["class_ref"], "assignment_id": "781"},
+                    "title": "تمرین اول",
+                    "submission": {"state": "unknown"},
+                    "evaluation": {"state": "unknown"},
+                    "deadlines": [],
+                }]
+            else:
+                return {
+                    "status": "ok",
+                    "observation": {
+                        "status": "ok",
+                        "scope": "assignment_detail",
+                        "coverage": "complete",
+                        "input": {
+                            "source": "quera",
+                            "assignment_ref": request["task_ref"],
+                            "course": "پایگاه داده",
+                            "title": "تمرین اول",
+                            "prompt": "کلید خارجی را توضیح دهید.",
+                            "attachments": [
+                                {"path": str(prompt_image), "role": "material"},
+                                {"path": str(prompt_pdf), "role": "prompt"},
+                            ],
+                            "course_materials": [{
+                                "title": "جزوهٔ درس",
+                                "url": "https://quera.org/course/db101/files/notes.pdf",
+                                "path": str(course_pdf),
+                                "role": "material",
+                            }],
+                            "course_materials_coverage": "complete",
+                            "course_materials_issues": [],
+                            "attachment_issues": [],
+                        },
+                    },
+                    "private_state": {"authenticated": True},
+                }
+            return {
+                "status": "ok",
+                "observation": {
+                    "status": "ok",
+                    "scope": scope,
+                    "coverage": "complete",
+                    "nodes": nodes,
+                },
+                "private_state": {"authenticated": True},
+            }
+
+        def resume(self, private_state, response):
+            raise AssertionError("no challenge expected")
+
+    data = tmp_path / "data"
+    home = tmp_path / "home"
+    work = tmp_path / "work"
+    vault = MemoryVault()
+    monkeypatch.setattr(api.access_store, "default_vault", lambda _: vault)
+    monkeypatch.setattr(api, "_platform_adapters", lambda _: {"quera": Adapter})
+    connected = api.access_configure(
+        "quera", {"username": "student", "password": "private"}, home=home
+    )
+    api.study_refresh(data=data, home=home)
+    task_ref = api.study_view(data=data)["platform_assignments"][0]["ref"]
+    api.course_link(
+        [{"connection_id": connected["connection_id"], "class_id": "db101"}],
+        {"id": "database-course", "title": "پایگاه داده", "term": "ترم جاری"},
+        expected_revision=api.study_view(data=data)["catalog_revision"],
+        data=data,
+    )
+
+    result = api.study_prepare(
+        {"task_ref": task_ref}, data=data, home=home, work=work, vault=vault
+    )
+
+    assert result["status"] == "ok"
+    assert result["work"]["input"]["prompt"] == "کلید خارجی را توضیح دهید."
+    assert [item["role"] for item in result["work"]["attachments"]] == [
+        "material", "prompt"
+    ]
+    assert result["course_materials"][0]["coverage"] == "complete"
+    assert result["course_materials"][0]["downloaded"] == 1
+    course_resources = [
+        item for item in result["resources"][0]["resources"]
+        if item.get("title") == "جزوهٔ درس"
+    ]
+    assert len(course_resources) == 1
+    assert course_resources[0]["provenance"] == (
+        "https://quera.org/course/db101/files/notes.pdf"
+    )
+    resource_binding = next(
+        binding for binding in result["resources"][0]["bindings"]
+        if binding["resource_id"] == course_resources[0]["id"]
+    )
+    assert resource_binding["extent"] == {}
+
+
+def test_study_prepare_checks_cross_platform_course_sources_and_snapshots(
+    tmp_path, monkeypatch
+):
+    cw_notes = tmp_path / "cw-notes.pdf"
+    cw_notes.write_bytes(b"verified CW course notes")
+    quera_notes = tmp_path / "quera-notes.pdf"
+    quera_notes.write_bytes(b"verified Quera course notes")
+
+    class MemoryVault:
+        def __init__(self):
+            self.values = {}
+
+        def put(self, key, value):
+            self.values[key] = value
+
+        def get(self, key):
+            return self.values.get(key)
+
+        def delete(self, key):
+            self.values.pop(key, None)
+
+    class Adapter:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def observe(self, request, context):
+            platform = self.connection["platform"]
+            if request["scope"] == "classes":
+                nodes = [{
+                    "kind": "class",
+                    "ref": {
+                        "connection_id": self.connection["id"],
+                        "class_id": "2977" if platform == "cw" else "q-db101",
+                    },
+                    "title": (
+                        "امنیت داده و شبکه (۴۰۴۴۱۱) - نیم‌سال اول ۱۴۰۵"
+                        if platform == "cw"
+                        else "امنیت داده و شبکه سولماز سلیمی دانشگاه صنعتی شریف"
+                    ),
+                }]
+                observation = {"scope": "classes", "nodes": nodes}
+            elif request["scope"] == "assignments":
+                observation = {
+                    "scope": "assignments",
+                    "nodes": [{
+                        "kind": "assignment",
+                        "ref": {
+                            **request["class_ref"],
+                            "assignment_id": "812" if platform == "cw" else "107742",
+                        },
+                        "title": "تکلیف امنیت داده و شبکه",
+                        "submission": {"state": "unknown"},
+                        "evaluation": {"state": "unknown"},
+                        "deadlines": [],
+                    }],
+                }
+            elif request["scope"] == "course_materials":
+                observation = {
+                    "scope": "course_materials",
+                    "course_materials": [{
+                        "title": "جزوهٔ امنیت داده و شبکه",
+                        "url": (
+                            "https://cw.sharif.ir/pluginfile.php/course/2977/notes.pdf"
+                            if platform == "cw"
+                            else "https://quera.org/course/db101/files/notes.pdf"
+                        ),
+                        "path": str(cw_notes if platform == "cw" else quera_notes),
+                    }],
+                    "coverage": "complete",
+                    "issues": [],
+                }
+            else:
+                observation = {
+                    "scope": "assignment_detail",
+                    "input": {
+                        "source": "quera",
+                        "assignment_ref": request["task_ref"],
+                        "course": "امنیت داده و شبکه",
+                        "title": "تکلیف امنیت داده و شبکه",
+                        "prompt": "صورت سؤال دریافت شد.",
+                        "attachments": [],
+                        "course_materials": [{
+                            "title": "جزوهٔ کوئرا",
+                            "url": "https://quera.org/course/db101/files/notes.pdf",
+                            "path": str(quera_notes),
+                        }],
+                        "course_materials_coverage": "complete",
+                        "course_materials_issues": [],
+                        "attachment_issues": [],
+                    },
+                    "open_questions": [],
+                }
+            receipt = {
+                "status": "ok",
+                "scope": observation.pop("scope"),
+                "coverage": "complete",
+                **observation,
+            }
+            if "credentials" not in context:
+                return receipt
+            return {
+                "status": "ok",
+                "observation": receipt,
+                "private_state": {"authenticated": True},
+            }
+
+        def resume(self, private_state, response):
+            raise AssertionError("no challenge expected")
+
+    class CWHTTPClient:
+        def __init__(self, base):
+            self.base = base
+
+        def import_cookies(self, cookies):
+            pass
+
+        def export_cookies(self):
+            return []
+
+        def logged_in(self):
+            return True
+
+        def get(self, path, params=None):
+            if path == "/my/courses.php":
+                return '<a href="/course/view.php?id=2977">امنیت داده و شبکه</a>'
+            if path == "/mod/assign/view.php":
+                return "<h1>تکلیف امنیت داده و شبکه</h1><p>صورت سؤال CW</p>"
+            if path == "/course/view.php":
+                return (
+                    "<h1>امنیت داده و شبکه (۴۰۴۴۱۱) - نیم‌سال اول ۱۴۰۵</h1>"
+                    '<a href="/pluginfile.php/course/2977/notes.pdf">جزوهٔ CW</a>'
+                )
+            if path == "/course/resources.php":
+                return '<a href="/pluginfile.php/course/2977/notes.pdf">جزوهٔ CW</a>'
+            raise AssertionError("unexpected CW request: {}".format(path))
+
+        def get_bytes(self, path, params=None):
+            return cw_notes.read_bytes()
+
+    data = tmp_path / "data"
+    home = tmp_path / "home"
+    work = tmp_path / "work"
+    vault = MemoryVault()
+    monkeypatch.setattr(api.access_store, "default_vault", lambda _: vault)
+
+    def cw_factory(connection):
+        return api.CWAdapter(
+            connection,
+            client_factory=CWHTTPClient,
+            challenge_root=home / "access-challenges",
+            clock=lambda: "2026-10-19T12:00:00+03:30",
+        )
+
+    adapters = {"cw": cw_factory, "quera": Adapter}
+    cw_connection = api.access_configure(
+        "cw", {"username": "student", "password": "private"},
+        home=home, adapters=adapters,
+    )
+    quera_connection = api.access_configure(
+        "quera", {"username": "student", "password": "private"},
+        home=home, adapters=adapters,
+    )
+    api.study_refresh(
+        data=data,
+        adapters=[
+            Adapter({"id": cw_connection["connection_id"], "platform": "cw"}),
+            Adapter({"id": quera_connection["connection_id"], "platform": "quera"}),
+        ],
+    )
+    view = api.study_view(data=data)
+    task_ref = next(
+        item["ref"] for item in view["platform_assignments"]
+        if item["platform"] == "quera"
+    )
+
+    result = api.study_prepare(
+        {"task_ref": task_ref}, data=data, home=home, work=work,
+        adapters=adapters, vault=vault,
+    )
+
+    assert result["status"] == "partial"
+    assert result["course_sources"] == [
+        {
+            "task_ref": task_ref,
+            "platform": "quera",
+            "connection_id": quera_connection["connection_id"],
+            "status": "checked",
+            "coverage": "complete",
+            "resources_found": 1,
+        },
+        {
+            "task_ref": task_ref,
+            "platform": "cw",
+            "connection_id": cw_connection["connection_id"],
+            "status": "link_required",
+            "coverage": "not_checked",
+            "resources_found": 0,
+            "candidates": [{
+                "ref": {
+                    "connection_id": cw_connection["connection_id"],
+                    "class_id": "2977",
+                },
+                "title": "امنیت داده و شبکه (۴۰۴۴۱۱) - نیم‌سال اول ۱۴۰۵",
+                "course_code": "404411",
+                "term": "1405-1",
+            }],
+        },
+    ]
+
+    cw_ref = result["course_sources"][1]["candidates"][0]["ref"]
+    quera_ref = {
+        "connection_id": task_ref["connection_id"],
+        "class_id": task_ref["class_id"],
+    }
+    linked = api.course_link(
+        [cw_ref, quera_ref],
+        {"id": "security-1405", "title": "امنیت داده و شبکه", "term": "۱۴۰۵-۱"},
+        expected_revision=api.study_view(data=data)["catalog_revision"],
+        data=data,
+    )
+    prepared = api.study_prepare(
+        {"task_ref": task_ref}, data=data, home=home, work=work,
+        adapters=adapters, vault=vault,
+    )
+
+    assert linked["status"] == "ok"
+    cw_source = next(item for item in prepared["course_sources"] if item["platform"] == "cw")
+    assert cw_source["status"] == "checked"
+    assert cw_source["coverage"] == "complete"
+    assert cw_source["resources_found"] == 1
+    assert any(
+        resource["title"] == "جزوهٔ CW"
+        for resource in prepared["resources"][0]["resources"]
+    )
+    quera_resource = next(
+        resource for resource in prepared["resources"][0]["resources"]
+        if resource["title"] == "جزوهٔ کوئرا"
+    )
+    quera_bindings = [
+        binding for binding in prepared["resources"][0]["bindings"]
+        if binding["resource_id"] == quera_resource["id"]
+    ]
+    assert any(binding["target"] == {"task_ref": task_ref} for binding in quera_bindings)
+    assert any(
+        binding["target"] == {"offering_id": "security-1405"}
+        for binding in quera_bindings
+    )
+    captured_bytes = {
+        (data / capture["artifact_path"]).read_bytes()
+        for capture in prepared["resources"][0]["captures"]
+    }
+    assert captured_bytes == {
+        b"verified CW course notes",
+        b"verified Quera course notes",
+    }
+
+    cw_task_ref = next(
+        item["ref"] for item in api.study_view(data=data)["platform_assignments"]
+        if item["platform"] == "cw"
+    )
+    cw_prepared = api.study_prepare(
+        {"task_ref": cw_task_ref}, data=data, home=home, work=work,
+        adapters=adapters, vault=vault,
+    )
+    assert cw_prepared["status"] == "ok"
+    assert {item["platform"] for item in cw_prepared["course_sources"]} == {
+        "cw", "quera"
+    }
+    assert all(item["status"] == "checked" for item in cw_prepared["course_sources"])
+    assert cw_prepared["work"]["input"]["prompt"] == "تکلیف امنیت داده و شبکه\nصورت سؤال CW"
 
 
 def test_related_tasks_are_exposed_without_sharing_work_state(tmp_path):

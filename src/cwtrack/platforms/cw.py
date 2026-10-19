@@ -13,7 +13,7 @@ from typing import Callable
 from .. import auth
 from ..client import DEFAULT_BASE, Client, CwError
 from ..fetch import course_title
-from ..intake import collect_site
+from ..intake import collect_course_materials, collect_site
 from ..parse import parse_dump
 
 
@@ -38,7 +38,7 @@ class CWAdapter:
         self._client_factory = client_factory
         self._challenge_root = Path(challenge_root).expanduser().resolve()
         self._clock = clock
-        self._captcha_reader = captcha_reader or auth._try_ocr
+        self._captcha_reader = captcha_reader
 
     def observe(self, request: dict, context: dict) -> dict:
         if not _valid_request(request, self.connection):
@@ -109,11 +109,12 @@ class CWAdapter:
     def _login(self, client, credentials: dict) -> tuple[str, dict]:
         attempt_dir = self._new_attempt_dir()
         try:
-            state = auth.submit(
+            state = auth._attempt_captcha(
                 client,
                 credentials["username"],
                 credentials["password"],
                 attempt_dir,
+                captcha_reader=self._captcha_reader,
             )
         except (OSError, CwError, ValueError):
             self._discard_attempt(attempt_dir)
@@ -122,19 +123,6 @@ class CWAdapter:
             self._discard_attempt(attempt_dir)
             return "ok", {}
         if state["status"] in {auth.CAPTCHA_REQUIRED, auth.CAPTCHA_REJECTED}:
-            guess = self._captcha_reader(state["image"])
-            if guess:
-                tried = auth.submit(
-                    client,
-                    credentials["username"],
-                    credentials["password"],
-                    attempt_dir,
-                    captcha=guess["text"],
-                )
-                if tried["status"] == auth.OK:
-                    self._discard_attempt(attempt_dir)
-                    return "ok", {}
-                state = tried
             state["attempt_dir"] = attempt_dir
             return "challenge_required", state
         self._discard_attempt(attempt_dir)
@@ -153,6 +141,7 @@ class CWAdapter:
                     "image": str(image),
                     "viewer": str(Path(state["viewer"]).resolve()),
                     "message": state.get("message", "کد تصویر ورود را بخوان."),
+                    **({"ocr": state["ocr"]} if "ocr" in state else {}),
                 },
                 "expires_at": _expires(self._clock()),
             },
@@ -167,7 +156,10 @@ class CWAdapter:
 
     def _success(self, client, observation: dict) -> dict:
         return {
-            "status": "ok" if observation.get("status") == "ok" else "unavailable",
+            # Login succeeded even if reading the course page did not. Keep the
+            # authenticated cookies so the next refresh can retry observation
+            # without sending the user through CAPTCHA again.
+            "status": "ok",
             "observation": observation,
             "private_state": {"cookies": client.export_cookies()},
         }
@@ -211,6 +203,30 @@ class CWAdapter:
                 "input": received,
                 "open_questions": result.get("open_questions", []),
             }
+        if scope == "course_materials":
+            try:
+                result = collect_course_materials(
+                    int(request["class_ref"]["class_id"]),
+                    client,
+                    self._challenge_root.parent,
+                )
+            except (ConnectionError, TimeoutError, OSError, CwError, ValueError):
+                return {
+                    "status": "partial",
+                    "scope": scope,
+                    "coverage": "incomplete",
+                    "observed_at": observed_at,
+                    "course_materials": [],
+                    "course_materials_issues": [{"status": "unavailable"}],
+                }
+            return {
+                "status": "ok",
+                "scope": scope,
+                "coverage": result.get("coverage", "incomplete"),
+                "observed_at": observed_at,
+                "course_materials": result.get("course_materials", []),
+                "course_materials_issues": result.get("issues", []),
+            }
         if scope == "classes":
             try:
                 page = client.get("/my/courses.php")
@@ -222,12 +238,22 @@ class CWAdapter:
             nodes = []
             for course_id in ids:
                 try:
-                    course_page = client.get("/mod/assign/index.php", {"id": int(course_id)})
+                    course_page = client.get("/course/view.php", {"id": int(course_id)})
                 except (ConnectionError, TimeoutError, OSError, CwError):
-                    return _partial(scope, observed_at, nodes)
+                    return _partial(
+                        scope,
+                        observed_at,
+                        nodes,
+                        {"course_id": course_id, "reason": "course_page_unavailable"},
+                    )
                 title = course_title(course_page)
                 if not title:
-                    return _partial(scope, observed_at, nodes)
+                    return _partial(
+                        scope,
+                        observed_at,
+                        nodes,
+                        {"course_id": course_id, "reason": "course_title_not_found"},
+                    )
                 nodes.append({
                     "kind": "class",
                     "ref": {
@@ -307,6 +333,15 @@ def _valid_request(request: dict, connection: dict) -> bool:
     if request.get("scope") == "classes":
         return set(request) == {"scope"}
     class_ref = request.get("class_ref")
+    if request.get("scope") == "course_materials":
+        return (
+            set(request) == {"scope", "class_ref"}
+            and isinstance(class_ref, dict)
+            and set(class_ref) == {"connection_id", "class_id"}
+            and class_ref.get("connection_id") == connection.get("id")
+            and isinstance(class_ref.get("class_id"), str)
+            and class_ref["class_id"].isdigit()
+        )
     if request.get("scope") == "assignments":
         return (
             set(request) == {"scope", "class_ref"}
@@ -362,14 +397,19 @@ def _failed(scope: str, observed_at: str) -> dict:
     }
 
 
-def _partial(scope: str, observed_at: str, nodes: list[dict]) -> dict:
-    return {
+def _partial(
+    scope: str, observed_at: str, nodes: list[dict], failure: dict | None = None
+) -> dict:
+    result = {
         "status": "partial",
         "scope": scope,
         "coverage": "incomplete",
         "observed_at": observed_at,
         "nodes": nodes,
     }
+    if failure is not None:
+        result["failure"] = failure
+    return result
 
 
 def _login_page(page: str) -> bool:

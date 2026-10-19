@@ -51,6 +51,15 @@ artifact itself before using it; registration or capture alone is not evidence o
 Record the exact snapshot, used extent, parts, answer sections and requirements in
 `work_save(resource_uses=...)`, then keep the source ledger in the brief.
 
+For a shared CW/Quera task, also inspect every `course_sources` entry returned by
+`study_prepare`. Resolve `link_required` with the course code and term when available;
+if the identity remains ambiguous, ask once and keep source coverage incomplete until
+the student resolves it. Read resources from linked CW offerings as well as the task's
+own platform. Treat `local_library_only` as registered local material, not proof that
+the connected platform page was checked. Preserve `not_configured`, `needs_refresh`,
+`no_candidate`, authentication challenges and partial coverage as separate evidence;
+never replace them with “no course materials.”
+
 If the intake has open questions or the prompt is missing, ask for the missing text or
 clarification. For missing or changed assignment text, collect the updated input and
 persist it with `work_sync`; for another clarification, record the answer in the saved
@@ -66,6 +75,30 @@ data, and report a disagreement with the assignment page. Otherwise, copy
 assignment text, extracted constraints, open questions, assumptions and source ledger.
 
 Give the student the brief before writing anything substantial **when the assignment is large, ambiguous, or the approach has more than one reasonable fork** — one round trip is cheaper than a wrong document. When the assignment is small and clear, state the approach in a sentence and continue; do not make them confirm what they already asked for.
+
+### 2a. Persistent course principles — infer from the conversation
+
+At the start of every assignment, review the available conversation history for
+course-specific requirements the student expects to carry into later work. Do not
+wait for the student to say “save this” or “add this as a principle.” Treat language
+such as “always,” “for every experiment,” “must,” firm corrections to a previous
+deliverable, and repeated preferences as strong evidence of a durable principle.
+
+Separate a reusable course rule from a one-assignment choice. Keep deadlines,
+experiment-specific designs, one-time formatting requests and a team roster that may
+change with the current task unless the student clearly says they recur. When evidence
+is strong, update that course offering’s local principles file, add a dated history
+entry with the conversational or official-source basis, and capture a new immutable
+resource snapshot through `api.resource_capture()`. Keep earlier snapshots for
+auditability. When evidence is ambiguous and would materially change future work, ask
+one concise clarification; otherwise keep it task-scoped and continue.
+
+Before solving, read the newest captured principles snapshot attached to the exact
+course offering, along with the current assignment and official course material. A
+principle supplements those sources and does not replace them. Do not apply a rule to
+another offering merely because its course name is similar. After adding a principle,
+verify that the new snapshot is visible from `api.resource_view(target=...)` and
+refresh the resource dashboard when applicable.
 
 ### 3. Sources — the student's material first
 

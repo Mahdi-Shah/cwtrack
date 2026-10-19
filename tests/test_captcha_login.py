@@ -229,10 +229,10 @@ class TestTheCliPath:
         )
         auth.do_login(client, "u", "p", tmp_path)
         out = capsys.readouterr().out
-        assert "ABCDE" in out
+        assert "ورود موفق" in out
         assert client.logged_in()
 
-    def test_the_engine_gets_only_one_attempt(self, monkeypatch, tmp_path):
+    def test_ten_automatic_attempts_precede_the_bounded_human_attempts(self, monkeypatch, tmp_path):
         """Even when every image disagrees with reality, the loop must terminate.
 
         The cap is the point. Without it this is an infinite retry against a login
@@ -249,8 +249,7 @@ class TestTheCliPath:
             auth.do_login(client, "u", "p", tmp_path)
 
         posted = [p.get("logincaptcha") for p in client.posts]
-        assert posted.count("ABCDE") == 1, "the engine must not retry per image"
-        assert "ALSO WRONG" in posted
+        assert posted == ["ABCDE"] * 10 + ["ALSO WRONG"] * 3
 
     def test_a_rejected_reading_hands_back_to_the_prompt(
         self, monkeypatch, tmp_path, capsys
@@ -280,10 +279,6 @@ class TestTheCliPath:
         assert asked, "the human should have been asked after the reading was rejected"
         # And it says the reading failed, so a wrong guess is visible rather than
         # looking like a wrong password.
-        assert "پیشنهاد هم درست نبود" in out
-        # The engine gets exactly one attempt, then the human answers. Asserted as a
-        # count because "one attempt, ever" is the property: a per-image retry loop is
-        # the failure this feature could inflict, since a second read of the same glyphs
-        # is very likely the same mistake.
-        assert [p.get("logincaptcha") for p in client.posts] == ["ABCDE", "HUMAN"]
+        assert "پس از ۱۰ دور" in out
+        assert [p.get("logincaptcha") for p in client.posts] == ["ABCDE"] * 10 + ["HUMAN"]
         assert client.logged_in()
