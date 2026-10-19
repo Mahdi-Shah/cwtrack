@@ -1102,6 +1102,18 @@ def test_explicit_platform_selection_prepares_and_resumes_one_stable_work_item(
                     "deadlines": [],
                 }]
                 scope = "assignments"
+            elif request["scope"] == "course_materials":
+                return {
+                    "status": "ok",
+                    "observation": {
+                        "status": "ok",
+                        "scope": "course_materials",
+                        "coverage": "complete",
+                        "course_materials": [],
+                        "course_materials_issues": [],
+                    },
+                    "private_state": {"authenticated": True},
+                }
             else:
                 return {
                     "status": "ok",

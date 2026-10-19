@@ -124,6 +124,7 @@ def test_failed_refresh_keeps_last_success_and_records_the_latest_attempt(tmp_pa
             "coverage": "incomplete",
             "last_attempt_at": "2026-10-17T10:00:00Z",
             "last_success_at": "2026-10-17T09:00:00Z",
+            "last_success_coverage": "complete",
             "last_attempt_status": "unavailable",
         }
     ]
