@@ -1094,7 +1094,7 @@ def _dashboard_tasks(study: dict, now_epoch: int) -> list[dict]:
                 continue
             seen.add(key)
         deadlines = item.get("deadlines", []) or []
-        regular = next((d for d in deadlines if isinstance(d, dict) and d.get("kind") == "regular"), None)
+        regular = next((d for d in deadlines if isinstance(d, dict) and d.get("kind") in {"regular", "normal"}), None)
         late = next((d for d in deadlines if isinstance(d, dict) and d.get("kind") == "late"), None)
         # Older records may only have one untyped deadline.
         if regular is None:
@@ -1244,7 +1244,7 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
             else EVALUATION_LABELS.get(evaluation_state, "اطلاعات ارزیابی دریافت نشده")
         )
         deadlines = assignment.get("deadlines", [])
-        deadline = next((d for d in deadlines if isinstance(d, dict) and d.get("kind") == "regular"), None)
+        deadline = next((d for d in deadlines if isinstance(d, dict) and d.get("kind") in {"regular", "normal"}), None)
         late_deadline = next((d for d in deadlines if isinstance(d, dict) and d.get("kind") == "late"), None)
         if deadline is None:
             deadline = next((d for d in deadlines if isinstance(d, dict) and not d.get("kind")), {})
