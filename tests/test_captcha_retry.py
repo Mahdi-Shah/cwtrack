@@ -8,9 +8,9 @@ import pytest
 
 Image = pytest.importorskip("PIL.Image", reason="CAPTCHA fixtures need Pillow")
 
-from cwtrack import api, auth, captcha
-from cwtrack.platforms.cw import CWAdapter
-from test_captcha import make_captcha
+from cwtrack import api, auth, captcha  # noqa: E402
+from cwtrack.platforms.cw import CWAdapter  # noqa: E402
+from test_captcha import make_captcha  # noqa: E402
 
 
 class MemoryVault:

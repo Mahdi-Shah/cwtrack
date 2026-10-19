@@ -913,14 +913,13 @@ def _attach_quera_course_materials(received: dict, *, data=None) -> list[dict]:
     if not _valid_task_ref(task_ref) or not isinstance(materials, list):
         return []
     data_dir = find_data_dir(str(data) if data else "")
-    library = _resource_library(data_dir)
     class_ref = {
         "connection_id": task_ref["connection_id"],
         "class_id": task_ref["class_id"],
     }
     offering = catalog_store.Catalog(data_dir).offering_for(class_ref)
     target = {"offering_id": offering["id"]} if offering else {"task_ref": task_ref}
-    return _attach_course_material_files(materials, target=target, data=data)
+    return _attach_course_material_files(materials, target=target, data=data_dir)
 
 
 def _attach_course_material_files(
@@ -1001,7 +1000,7 @@ def _fetch_linked_course_materials(
     task_platform = task_class.get("platform") if task_class else None
     if task_platform not in {"cw", "quera"}:
         return None
-    linked_refs = set(tuple(sorted(item.items())) for item in (offering or {}).get("class_refs", []))
+    linked_refs = {tuple(sorted(item.items())) for item in (offering or {}).get("class_refs", [])}
     targets = []
     if task_platform == "cw":
         targets.append((task_class, class_ref))

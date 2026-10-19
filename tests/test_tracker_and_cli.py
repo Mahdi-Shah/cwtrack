@@ -383,7 +383,7 @@ class TestCli:
                 self.values.pop(key, None)
 
         def fallback_getpass(prompt):
-            warnings.warn("echo fallback", cli.getpass.GetPassWarning)
+            warnings.warn("echo fallback", cli.getpass.GetPassWarning, stacklevel=2)
             return "visible-password"
 
         vault = MemoryVault()

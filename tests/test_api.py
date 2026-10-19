@@ -1553,7 +1553,7 @@ def test_study_prepare_checks_cross_platform_course_sources_and_snapshots(
         "quera", {"username": "student", "password": "private"},
         home=home, adapters=adapters,
     )
-    refreshed = api.study_refresh(
+    api.study_refresh(
         data=data,
         adapters=[
             Adapter({"id": cw_connection["connection_id"], "platform": "cw"}),
