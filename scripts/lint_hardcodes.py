@@ -37,7 +37,10 @@ TW = re.compile(rf"(?<![\w-]){_TW_PREFIX}-{_TW_COLOR}-(?:50|100|200|300|400|500|
 # hardcoded font-family not coming from a token/var
 FONT = re.compile(r"font-family\s*:\s*(?!.*var\()")
 # A custom-property definition line, where a raw value is the point.
-TOKEN_DEF = re.compile(r"--[\w\-]+\s*:")
+# CSS custom-property names may contain dots when emitted from fractional
+# design-token paths (for example --space-0.5). Treat the whole declaration as
+# a token definition so its declared value is not mistaken for a use-site.
+TOKEN_DEF = re.compile(r"--[\w.\-]+\s*:")
 # Other token syntaxes that still exempt a whole line: a theme() call, a
 # tokens.foo path, a {token.reference}. Unlike var(), these are rare enough that
 # narrowing them has no measured benefit.

@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="fa" dir="rtl" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="نقشهٔ تصویری جریان‌ها، نقش‌ها و ماژول‌های cwtrack">
+  <title>نقشهٔ تصویری cwtrack</title>
+  <link rel="stylesheet" href="architecture-visual-theme.css">
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: var(--font-sans);
+      font-size: var(--text-base);
+      color: var(--color-text-primary);
+      background: var(--color-surface-page);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--color-surface-page); color: var(--color-text-primary); line-height: var(--leading-relaxed); }
+    a { color: var(--color-text-link); text-underline-offset: var(--space-1); }
+    a:focus-visible, summary:focus-visible { outline: var(--border-width-medium) solid var(--color-border-focus); outline-offset: var(--space-1); }
+    .shell { width: min(100%, 92rem); margin-inline: auto; padding: var(--space-4); }
+    .topbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); padding-block: var(--space-3); border-block-end: var(--border-width-thin) solid var(--color-border-default); }
+    .brand { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-semibold); }
+    .brand-mark { display: grid; place-items: center; inline-size: var(--size-control-sm); block-size: var(--size-control-sm); border-radius: var(--radius-md); background: var(--color-surface-raised); color: var(--color-text-primary); font-size: var(--text-sm); }
+    .topbar nav { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    .topbar nav a { display: flex; align-items: center; min-block-size: var(--size-control-lg); padding-inline: var(--space-3); border-radius: var(--radius-full); color: var(--color-text-secondary); text-decoration: none; }
+    .topbar nav a:hover { background: var(--color-action-secondary); color: var(--color-text-primary); }
+    .hero { display: grid; gap: var(--space-6); padding-block: var(--space-12) var(--space-8); }
+    .hero-copy { max-inline-size: 42rem; }
+    .eyebrow { margin: 0 0 var(--space-2); color: var(--color-text-secondary); font-size: var(--text-sm); }
+    h1, h2, h3, p { margin-block-start: 0; }
+    h1 { max-inline-size: 18ch; margin-block-end: var(--space-3); font-size: var(--text-5xl); line-height: var(--leading-tight); font-weight: var(--weight-semibold); }
+    h2 { margin-block-end: var(--space-2); font-size: var(--text-3xl); line-height: var(--leading-snug); font-weight: var(--weight-semibold); }
+    h3 { margin-block-end: var(--space-1); font-size: var(--text-lg); line-height: var(--leading-snug); font-weight: var(--weight-semibold); }
+    .lede { max-inline-size: 58ch; margin-block-end: 0; color: var(--color-text-secondary); }
+    .hero-art { position: relative; display: grid; grid-template-columns: 1fr; gap: var(--space-2); align-items: stretch; }
+    .hero-node { display: flex; align-items: center; gap: var(--space-3); min-block-size: var(--size-control-xl); padding: var(--space-3); border: var(--border-width-thin) solid var(--color-border-default); border-radius: var(--radius-card); background: var(--color-surface-card); }
+    .hero-node strong { display: block; }
+    .hero-node small { display: block; color: var(--color-text-secondary); }
+    .hero-symbol { display: grid; flex: none; place-items: center; inline-size: var(--size-control-md); block-size: var(--size-control-md); border-radius: var(--radius-full); background: var(--color-surface-raised); color: var(--color-text-primary); font-weight: var(--weight-semibold); }
+    .hero-arrow { display: grid; place-items: center; color: var(--color-text-tertiary); font-size: var(--text-xl); line-height: var(--leading-none); }
+    .hero-note { align-self: end; max-inline-size: 24rem; color: var(--color-text-secondary); }
+    main { display: grid; gap: var(--space-16); padding-block: var(--space-4) var(--space-16); }
+    section { scroll-margin-block-start: var(--space-4); }
+    .section-head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: var(--space-3); margin-block-end: var(--space-6); }
+    .section-head p { max-inline-size: 52ch; margin-block-end: 0; color: var(--color-text-secondary); }
+    .hint { color: var(--color-text-tertiary); font-size: var(--text-sm); }
+    .flowline { position: relative; display: grid; gap: var(--space-4); margin: 0; padding: 0; list-style: none; }
+    .flowline::before { position: absolute; inset-block: var(--space-6); inset-inline-start: var(--space-5); inline-size: var(--border-width-thin); background: var(--color-border-default); content: ""; }
+    .step { position: relative; z-index: 1; min-inline-size: 0; }
+    .step summary { display: grid; grid-template-columns: var(--size-control-md) minmax(0, 1fr); gap: var(--space-3); align-items: center; min-block-size: var(--size-control-xl); padding: var(--space-3); border: var(--border-width-thin) solid var(--color-border-default); border-radius: var(--radius-card); background: var(--color-surface-card); cursor: pointer; list-style: none; }
+    .step summary::-webkit-details-marker { display: none; }
+    .step summary::marker { content: ""; }
+    .step summary:hover { background: var(--color-interactive-hover-overlay); }
+    .step[open] summary { border-color: var(--color-border-strong); }
+    .step-no { display: grid; place-items: center; inline-size: var(--size-control-md); block-size: var(--size-control-md); border-radius: var(--radius-full); background: var(--color-action-secondary); color: var(--color-text-primary); font-variant-numeric: tabular-nums; font-weight: var(--weight-semibold); }
+    .step-title { display: block; font-weight: var(--weight-semibold); }
+    .step-owner { display: block; color: var(--color-text-secondary); font-size: var(--text-sm); }
+    .step-detail { margin: 0; padding: var(--space-3) var(--space-4) var(--space-4); color: var(--color-text-secondary); }
+    .actor-key { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-block-start: var(--space-5); }
+    .actor { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-3); border-radius: var(--radius-full); background: var(--color-action-secondary); font-size: var(--text-sm); }
+    .actor-dot { inline-size: var(--space-2); block-size: var(--space-2); border-radius: var(--radius-full); background: var(--color-chart-1); }
+    .swimlanes { display: grid; gap: var(--space-3); }
+    .lane { display: grid; grid-template-columns: 1fr; gap: var(--space-3); align-items: center; padding-block: var(--space-3); border-block-end: var(--border-width-thin) solid var(--color-border-default); }
+    .lane-label { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-semibold); }
+    .lane-mark { display: grid; place-items: center; inline-size: var(--size-control-sm); block-size: var(--size-control-sm); border-radius: var(--radius-md); background: var(--color-action-secondary); color: var(--color-text-secondary); }
+    .lane-track { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+    .lane-node { padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--color-surface-sunken); }
+    .lane-arrow { color: var(--color-text-tertiary); }
+    .course-map { display: grid; gap: var(--space-5); align-items: center; }
+    .map-column { display: grid; gap: var(--space-3); }
+    .map-caption { margin-block-end: var(--space-1); color: var(--color-text-secondary); font-size: var(--text-sm); }
+    .map-node { padding: var(--space-3); border: var(--border-width-thin) solid var(--color-border-default); border-radius: var(--radius-card); background: var(--color-surface-card); }
+    .map-node small { display: block; color: var(--color-text-secondary); }
+    .map-node--focus { border-color: var(--color-border-default); background: var(--color-surface-raised); }
+    .map-node--loose { border-style: dashed; }
+    .map-join { display: grid; place-items: center; min-block-size: var(--size-control-md); color: var(--color-text-tertiary); font-size: var(--text-2xl); }
+    .map-branch { display: grid; gap: var(--space-3); padding-block-start: var(--space-5); border-block-start: var(--border-width-thin) solid var(--color-border-default); }
+    .term-flow { display: grid; gap: var(--space-4); }
+    .term-node { padding: var(--space-4); border: var(--border-width-thin) solid var(--color-border-default); border-radius: var(--radius-card); background: var(--color-surface-card); }
+    .term-node p { margin: 0; color: var(--color-text-secondary); }
+    .term-arrow { display: grid; place-items: center; color: var(--color-text-tertiary); font-size: var(--text-2xl); }
+    .term-states { display: grid; gap: var(--space-3); }
+    .state { display: grid; grid-template-columns: var(--size-control-sm) minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: var(--space-3); border-radius: var(--radius-card); background: var(--color-surface-sunken); }
+    .state-symbol { display: grid; place-items: center; inline-size: var(--size-control-sm); block-size: var(--size-control-sm); border-radius: var(--radius-full); background: var(--color-action-secondary); font-weight: var(--weight-semibold); }
+    .state small { display: block; color: var(--color-text-secondary); }
+    .state--ok .state-symbol { background: var(--color-feedback-success-bg); color: var(--color-feedback-success-text); }
+    .state--warn .state-symbol { background: var(--color-feedback-warning-bg); color: var(--color-feedback-warning-text); }
+    .state--bad .state-symbol { background: var(--color-feedback-error-bg); color: var(--color-feedback-error-text); }
+    .architecture { display: grid; gap: var(--space-3); }
+    .arch-layer { display: grid; gap: var(--space-3); padding: var(--space-3); border-block-end: var(--border-width-thin) solid var(--color-border-default); }
+    .arch-layer-label { color: var(--color-text-secondary); font-size: var(--text-sm); }
+    .arch-nodes { display: grid; gap: var(--space-2); }
+    .arch-node { min-inline-size: 0; padding: var(--space-3); border-radius: var(--radius-card); background: var(--color-surface-sunken); text-align: center; }
+    .arch-node strong { display: block; }
+    .arch-node small { display: block; color: var(--color-text-secondary); }
+    .arch-node--entry { background: var(--color-surface-raised); }
+    .arch-node--owner { background: var(--color-surface-raised); }
+    .arch-arrows { display: grid; place-items: center; color: var(--color-text-tertiary); font-size: var(--text-xl); }
+    .storage-map { display: grid; gap: var(--space-3); }
+    .storage-row { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: var(--space-2); align-items: center; padding-block: var(--space-3); border-block-end: var(--border-width-thin) solid var(--color-border-default); }
+    .storage-thing { font-weight: var(--weight-medium); }
+    .storage-arrow { color: var(--color-text-tertiary); }
+    .story-map { display: grid; gap: var(--space-5); }
+    .story-stage { display: grid; gap: var(--space-3); padding-block: var(--space-3) var(--space-5); border-block-end: var(--border-width-thin) solid var(--color-border-default); }
+    .story-stage-head { display: flex; align-items: center; gap: var(--space-3); }
+    .story-stage-no { display: grid; place-items: center; flex: none; inline-size: var(--size-control-md); block-size: var(--size-control-md); border-radius: var(--radius-full); background: var(--color-surface-raised); color: var(--color-text-primary); font-weight: var(--weight-semibold); }
+    .story-stage-head small { display: block; color: var(--color-text-secondary); }
+    .story-nodes { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    .story-node { display: inline-flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-radius: var(--radius-md); background: var(--color-surface-sunken); }
+    .story-id { color: var(--color-text-link); font-family: var(--font-mono); font-size: var(--text-xs); }
+    .story-flows { display: grid; gap: var(--space-3); margin-block-start: var(--space-6); }
+    .story-case { min-inline-size: 0; border: var(--border-width-thin) solid var(--color-border-default); border-radius: var(--radius-card); background: var(--color-surface-card); }
+    .story-case summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-3); align-items: center; min-block-size: var(--size-control-xl); padding: var(--space-3); cursor: pointer; list-style: none; }
+    .story-case summary::-webkit-details-marker { display: none; }
+    .story-case summary::marker { content: ""; }
+    .story-case summary:hover { background: var(--color-interactive-hover-overlay); }
+    .story-case summary:focus-visible { outline: var(--border-width-medium) solid var(--color-border-focus); outline-offset: var(--space-1); }
+    .story-case[open] { background: var(--color-surface-raised); }
+    .story-case[open] summary { border-block-end: var(--border-width-thin) solid var(--color-border-default); }
+    .story-case-title { display: block; font-weight: var(--weight-semibold); }
+    .story-case-goal { display: block; color: var(--color-text-secondary); font-size: var(--text-sm); }
+    .story-status { max-inline-size: 10rem; padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); background: var(--color-surface-raised); color: var(--color-text-secondary); font-size: var(--text-xs); text-align: center; white-space: normal; }
+    .story-steps { display: grid; gap: var(--space-2); margin: 0; padding: var(--space-4); list-style: none; counter-reset: story-step; }
+    .story-step { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; min-inline-size: 0; counter-increment: story-step; }
+    .story-step::before { display: grid; place-items: center; inline-size: var(--size-control-sm); block-size: var(--size-control-sm); border-radius: var(--radius-full); background: var(--color-action-secondary); color: var(--color-text-primary); content: counter(story-step); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+    .story-step-card { min-inline-size: 0; padding: var(--space-3); border-radius: var(--radius-md); background: var(--color-surface-sunken); }
+    .story-step-actor { display: block; margin-block-end: var(--space-1); color: var(--color-text-secondary); font-size: var(--text-xs); font-weight: var(--weight-semibold); }
+    .story-step-action { display: block; }
+    .story-step-place { display: block; margin-block-start: var(--space-1); color: var(--color-text-tertiary); font-size: var(--text-xs); }
+    .story-case-note { margin: 0; padding: 0 var(--space-4) var(--space-4); color: var(--color-text-secondary); font-size: var(--text-sm); }
+    .story-proof { display: grid; gap: var(--space-2); padding: 0 var(--space-4) var(--space-4); }
+    .story-proof > div { display: grid; gap: var(--space-1); padding: var(--space-3); border: var(--border-width-thin) solid var(--color-border-default); border-radius: var(--radius-md); background: var(--color-surface-card); }
+    .story-proof strong { font-size: var(--text-sm); }
+    .story-proof span { color: var(--color-text-secondary); font-size: var(--text-sm); }
+    .refactor-map { display: grid; gap: var(--space-5); }
+    .refactor-side { display: grid; gap: var(--space-3); }
+    .refactor-side h3 { margin-block-end: 0; }
+    .refactor-node { display: grid; gap: var(--space-1); padding: var(--space-3); border-block-end: var(--border-width-thin) solid var(--color-border-default); }
+    .refactor-node small { color: var(--color-text-secondary); }
+    .refactor-arrow { display: grid; place-items: center; color: var(--color-text-tertiary); font-size: var(--text-2xl); }
+    code { direction: ltr; unicode-bidi: isolate; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--color-surface-sunken); font-family: var(--font-mono); font-size: var(--text-sm); overflow-wrap: anywhere; }
+    .closing { display: grid; gap: var(--space-4); padding-block-start: var(--space-5); border-block-start: var(--border-width-thin) solid var(--color-border-default); }
+    .closing strong { font-size: var(--text-xl); }
+    .closing p { max-inline-size: 62ch; margin: 0; color: var(--color-text-secondary); }
+    footer { padding-block: var(--space-5); border-block-start: var(--border-width-thin) solid var(--color-border-default); color: var(--color-text-secondary); font-size: var(--text-sm); }
+    @media (min-width: 40rem) {
+      .shell { padding-inline: var(--space-8); }
+      .hero { grid-template-columns: minmax(0, 1.1fr) minmax(24rem, 0.9fr); align-items: end; }
+      .hero-art { grid-template-columns: 1fr auto 1fr auto 1fr; align-items: center; }
+      .hero-node { min-block-size: var(--size-control-xl); }
+      .hero-arrow { transform: rotate(90deg); }
+      .flowline { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .flowline::before { inset-block: auto; inset-inline: var(--space-8); inset-block-start: var(--size-control-md); inline-size: auto; block-size: var(--border-width-thin); }
+      .lane { grid-template-columns: minmax(8rem, 0.22fr) minmax(0, 1fr); }
+      .course-map { grid-template-columns: minmax(0, 1fr) auto minmax(0, 0.8fr) auto minmax(0, 1fr); }
+      .map-join { transform: rotate(90deg); }
+      .map-branch { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; }
+      .term-flow { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
+      .term-arrow { transform: rotate(90deg); }
+      .term-states { grid-column: 1 / -1; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .arch-layer { grid-template-columns: minmax(8rem, 0.2fr) minmax(0, 1fr); align-items: center; }
+      .arch-nodes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .arch-arrows { transform: rotate(90deg); }
+      .storage-row { grid-template-columns: minmax(0, 0.8fr) auto minmax(0, 1.2fr); }
+      .story-map { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-4); }
+      .story-proof { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .refactor-map { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; }
+      .refactor-arrow { transform: rotate(90deg); }
+    }
+    @media (min-width: 64rem) {
+      .shell { padding-inline: var(--space-12); }
+      .flowline { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: var(--space-3); }
+      .step summary { grid-template-columns: 1fr; justify-items: start; align-content: start; min-block-size: 100%; }
+      .step-detail { padding-inline: var(--space-3); }
+      .flowline::before { inset-inline: var(--space-10); }
+      .course-map { grid-template-columns: minmax(0, 1fr) auto minmax(0, 0.7fr) auto minmax(0, 1fr); }
+      .map-column--platforms { grid-template-columns: 1fr 1fr; }
+      .map-column--platforms .map-caption { grid-column: 1 / -1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0s !important; animation-duration: 0s !important; }
+    }
+    @media print {
+      .topbar nav { display: none; }
+      .step-detail { display: block; }
+      .step summary { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">cw</span><span>نقشهٔ cwtrack</span></div>
+      <nav aria-label="رفتن به بخش‌ها">
+        <a href="#journey">مسیر کار</a>
+        <a href="#stories">داستان‌ها</a>
+        <a href="#story-flows">گام‌های هر داستان</a>
+        <a href="#course">درس‌ها</a>
+        <a href="#work">انجام تکلیف</a>
+        <a href="#modules">ماژول‌ها</a>
+        <a href="#storage">داده‌ها</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="page-title">
+        <div class="hero-copy">
+          <p class="eyebrow">راهنمای تصویری پروژه</p>
+          <h1 id="page-title">از کلاس تا تحویل</h1>
+          <p class="lede">در هر مرحله ببین چه کسی کار را انجام می‌دهد و اطلاعات کجا می‌رود.</p>
+        </div>
+        <div class="hero-art" role="img" aria-label="مسیر کلی از درخواست دانشجو تا بازبینی و تحویل دستی">
+          <div class="hero-node"><span class="hero-symbol">۱</span><span><strong>درخواست</strong><small>دانشجو</small></span></div>
+          <span class="hero-arrow" aria-hidden="true">←</span>
+          <div class="hero-node"><span class="hero-symbol">۲</span><span><strong>آماده‌سازی</strong><small>Codex و cwtrack</small></span></div>
+          <span class="hero-arrow" aria-hidden="true">←</span>
+          <div class="hero-node"><span class="hero-symbol">۳</span><span><strong>بازبینی</strong><small>دانشجو</small></span></div>
+        </div>
+      </section>
+
+      <section id="journey" aria-labelledby="journey-title">
+        <div class="section-head">
+          <div><p class="eyebrow">گردش اصلی</p><h2 id="journey-title">یک تکلیف چه مسیری طی می‌کند؟</h2></div>
+          <p class="hint">روی هر مرحله بزن تا جزئیاتش باز شود.</p>
+        </div>
+        <ol class="flowline">
+          <li><details class="step"><summary><span class="step-no">۱</span><span><span class="step-title">انتخاب تکلیف</span><span class="step-owner">دانشجو</span></span></summary><p class="step-detail">تکلیف را صریح انتخاب می‌کنی تا کار روی مورد اشتباه شروع نشود.</p></details></li>
+          <li><details class="step"><summary><span class="step-no">۲</span><span><span class="step-title">دریافت زمینه</span><span class="step-owner">Codex و API</span></span></summary><p class="step-detail"><code>study_prepare</code> صورت سؤال، پیوست‌ها، منابع مرتبط و کمبودها را گرد می‌آورد.</p></details></li>
+          <li><details class="step"><summary><span class="step-no">۳</span><span><span class="step-title">خواندن منابع</span><span class="step-owner">Codex</span></span></summary><p class="step-detail">Codex محتوای فایل‌ها را می‌خواند؛ صرف ثبت منبع به معنی خواندن آن نیست.</p></details></li>
+          <li><details class="step"><summary><span class="step-no">۴</span><span><span class="step-title">ساخت پاسخ</span><span class="step-owner">Codex و ابزار محلی</span></span></summary><p class="step-detail">پاسخ در workspace ساخته و به‌عنوان نسخهٔ کار ذخیره می‌شود.</p></details></li>
+          <li><details class="step"><summary><span class="step-no">۵</span><span><span class="step-title">کنترل خروجی</span><span class="step-owner">Codex و کد</span></span></summary><p class="step-detail">فایل واقعی در برابر الزام‌های تکلیف بررسی می‌شود و نتیجه به همان نسخه وصل می‌ماند.</p></details></li>
+          <li><details class="step"><summary><span class="step-no">۶</span><span><span class="step-title">بازبینی و تحویل</span><span class="step-owner">دانشجو</span></span></summary><p class="step-detail">تو خروجی را می‌خوانی و اگر خواستی، خودت در مرورگر سامانه بارگذاری می‌کنی.</p></details></li>
+        </ol>
+        <div class="actor-key" aria-label="راهنمای رنگ بازیگران">
+          <span class="actor" data-actor="student"><span class="actor-dot" aria-hidden="true"></span>دانشجو</span>
+          <span class="actor" data-actor="ai"><span class="actor-dot" aria-hidden="true"></span>هوش مصنوعی</span>
+          <span class="actor" data-actor="code"><span class="actor-dot" aria-hidden="true"></span>کد محلی</span>
+          <span class="actor" data-actor="site"><span class="actor-dot" aria-hidden="true"></span>سامانه</span>
+        </div>
+      </section>
+
+      <section id="roles" aria-labelledby="roles-title">
+        <div class="section-head"><div><p class="eyebrow">تقسیم مسئولیت</p><h2 id="roles-title">هر بازیگر چه کاری می‌کند؟</h2></div></div>
+        <div class="swimlanes" role="img" aria-label="چهار ردیف مسئولیت برای دانشجو، Codex، cwtrack و سامانهٔ بیرونی">
+          <div class="lane"><div class="lane-label"><span class="lane-mark">ش</span>دانشجو</div><div class="lane-track"><span class="lane-node">انتخاب</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">پاسخ به ابهام</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">بازبینی</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">بارگذاری دستی</span></div></div>
+          <div class="lane"><div class="lane-label"><span class="lane-mark">AI</span>Codex</div><div class="lane-track"><span class="lane-node">فهم درخواست</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">خواندن منابع</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">تهیهٔ پاسخ</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">گزارش محدودیت</span></div></div>
+          <div class="lane"><div class="lane-label"><span class="lane-mark">کد</span>cwtrack</div><div class="lane-track"><span class="lane-node">دریافت</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">ثبت داده</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">نسخه‌بندی</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">ثبت بررسی</span></div></div>
+          <div class="lane"><div class="lane-label"><span class="lane-mark">وب</span>سامانه</div><div class="lane-track"><span class="lane-node">کلاس و تکلیف</span><span class="lane-arrow" aria-hidden="true">←</span><span class="lane-node">وضعیت ارسال</span></div></div>
+        </div>
+      </section>
+
+      <section id="stories" aria-labelledby="stories-title">
+        <div class="section-head"><div><p class="eyebrow">نقشهٔ داستان‌های کاربر</p><h2 id="stories-title">از شناخت وضعیت تا تحویل</h2></div><p>شناسه‌ها به فهرست دقیق داستان‌ها در سند محصول وصل‌اند.</p></div>
+        <div class="story-map" role="img" aria-label="چهار مرحلهٔ داستان‌های کاربر: اتصال و شناخت، سازمان‌دهی، انجام تکلیف، بازبینی و گزارش">
+          <div class="story-stage"><div class="story-stage-head"><span class="story-stage-no">۱</span><span><strong>شناخت وضعیت</strong><small>ورود و دریافت</small></span></div><div class="story-nodes"><span class="story-node"><span class="story-id">US-01</span>اتصال</span><span class="story-node"><span class="story-id">US-02</span>دریافت</span><span class="story-node"><span class="story-id">US-03</span>چالش</span><span class="story-node"><span class="story-id">US-04</span>تکلیف‌ها</span><span class="story-node"><span class="story-id">US-06</span>تازگی</span></div></div>
+          <div class="story-stage"><div class="story-stage-head"><span class="story-stage-no">۲</span><span><strong>سازمان‌دهی</strong><small>درس و منبع</small></span></div><div class="story-nodes"><span class="story-node"><span class="story-id">US-05</span>پیوند کلاس</span><span class="story-node"><span class="story-id">US-08</span>منابع</span><span class="story-node"><span class="story-id">US-12</span>ارتباط</span></div></div>
+          <div class="story-stage"><div class="story-stage-head"><span class="story-stage-no">۳</span><span><strong>انجام</strong><small>پاسخ و کنترل</small></span></div><div class="story-nodes"><span class="story-node"><span class="story-id">US-07</span>انتخاب</span><span class="story-node"><span class="story-id">US-09</span>پاسخ</span><span class="story-node"><span class="story-id">US-10</span>بررسی</span></div></div>
+          <div class="story-stage"><div class="story-stage-head"><span class="story-stage-no">۴</span><span><strong>بازبینی</strong><small>تصمیم انسانی</small></span></div><div class="story-nodes"><span class="story-node"><span class="story-id">US-11</span>تحویل</span><span class="story-node"><span class="story-id">US-13</span>داشبورد</span><span class="story-node"><span class="story-id">US-14</span>ترمینال</span></div></div>
+        </div>
+      </section>
+
+      <section id="story-flows" aria-labelledby="story-flows-title">
+        <div class="section-head">
+          <div><p class="eyebrow">نقشهٔ مسئولیت‌ها</p><h2 id="story-flows-title">هر داستان را چه کسی پیش می‌برد؟</h2></div>
+          <p>هر ردیف را باز کن؛ شماره‌ها ترتیب کارند و زیر هر گام، مسئول و محل انجام آمده است. <a href="story-acceptance.md">معیار پایان، شواهد و شکاف هر داستان</a></p>
+        </div>
+        <div class="state" aria-label="راهنمای وضعیت داستان‌ها"><span class="state-symbol">راهنما</span><span><strong>برچسب کنار هر داستان وضعیت شواهد را می‌گوید</strong><small>«آفلاین» یعنی آزمون fixture؛ «زنده باز» یعنی حساب واقعی هنوز بررسی نشده؛ «شکاف» یعنی کار فنی مانده؛ «ارزیابی Codex باز» یعنی رفتار دستیار سنجیده نشده؛ «اقدام انسانی عمدی» یعنی مرحله طبق طراحی با دانشجوست.</small></span></div>
+        <div class="state" aria-label="وضعیت اجرای تأییدشده"><span class="state-symbol">اجرا</span><span><strong>به‌روزرسانی اجرای CLI و مرز ماژول‌ها</strong><small>اتصال‌های نام‌دار و فرمان‌های حوزه‌ای در دسترس‌اند؛ `study report` مشترک است و legacyهای CW حفظ شده‌اند. ownerهای `study`, `read_model`, `catalog_application` و `resource_application` جدا شده‌اند؛ facade عمومی `cwtrack.api` باقی است و بخشی از orchestration هنوز باید منتقل شود. دریافت زندهٔ 2026-10-19 فهرست کلاس کامل اما تکلیف‌ها ناقص بود؛ پذیرش کامل و checklist انسانی سناریوهای Codex هنوز بازند.</small><a href="cli-guide.fa.md">راهنمای کامل فرمان‌ها و فایل‌های ورودی</a> · <a href="story-acceptance.md">شاهدها و شکاف‌های به‌روز</a> · <a href="acceptance/live/2026-10-19.md">شاهد پالودهٔ زنده</a></span></div>
+        <div class="story-flows">
+          <details class="story-case"><summary><span class="story-id">US-01</span><span><span class="story-case-title">اتصال حساب</span><span class="story-case-goal">ثبت امن اتصال CW یا کوئرا</span></span><span class="story-status">آفلاین؛ زنده باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">سامانه و نام کاربری را انتخاب و رمز را وارد می‌کند.</span><span class="story-step-place">گفت‌وگوی Codex یا ترمینال `cwtrack connect`</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex یا CLI</span><span class="story-step-action">درخواست اتصال را به API می‌فرستد؛ CLI رمز را پنهان می‌گیرد.</span><span class="story-step-place"><code>access_configure</code> / لایهٔ CLI</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">تنظیم اتصال و راز را در مخزن امن دستگاه ثبت می‌کند.</span><span class="story-step-place">ماژول `access` و vault امن</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو و سامانه</span><span class="story-step-action">در دریافت بعدی، ورود را کامل می‌کنند؛ سامانه ممکن است چالش یا خطا برگرداند.</span><span class="story-step-place">Adapter و وب‌سایت CW/کوئرا</span></div></li></ol><p class="story-case-note">ثبت اتصال به‌تنهایی ورود موفق را تضمین نمی‌کند؛ نتیجه هنگام ارتباط با سامانه روشن می‌شود.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>رمز بیرون از فایل پروژه بماند و اتصال درست در refresh استفاده شود.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>پذیرش زندهٔ اتصال هنوز باز است؛ CLI نام‌دار هر دو سامانه پیاده شده است.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-02</span><span><span class="story-case-title">دریافت کلاس و تکلیف</span><span class="story-case-goal">به‌روزرسانی مشاهده‌های محلی</span></span><span class="story-status">آفلاین؛ زنده ناقص</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">درخواست تازه‌سازی می‌دهد.</span><span class="story-step-place">گفت‌وگوی Codex یا CLI</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex یا CLI</span><span class="story-step-action">اتصال‌های انتخاب‌شده را برای تازه‌سازی به API می‌دهد.</span><span class="story-step-place"><code>study_refresh</code> یا `cwtrack fetch`</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Adapter و سامانه</span><span class="story-step-action">هر اتصال را جدا می‌خوانند؛ سایت دادهٔ قابل‌دسترسی را برمی‌گرداند.</span><span class="story-step-place">Adapterهای CW/کوئرا و وب‌سایت بیرونی</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">مشاهده، پوشش و زمان را ثبت می‌کند و نتیجهٔ ناقص/خطا را جدا نگه می‌دارد.</span><span class="story-step-place">parser و `catalog`; آخرین موفقیت حفظ می‌شود</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">نتیجه و محدودیت دریافت را به دانشجو خلاصه می‌کند.</span><span class="story-step-place">گفت‌وگو</span></div></li></ol><p class="story-case-note">وجود مسیر کد، پذیرش زنده و پایدار هر دو سامانه را ثابت نمی‌کند.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>نتیجه، زمان و پوشش هر اتصال مستقل ثبت شود و خطا آخرین موفقیت را نگه دارد.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>فهرست کلاس هر دو سامانه کامل بود؛ دریافت تکلیف CW برای 8/10 و کوئرا برای 3/3 مشاهده `unavailable` بود. جزئیات پالوده در گزارش پذیرش آمده است؛ legacy `fetch` همچنان CW-only است.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-03</span><span><span class="story-case-title">ادامه پس از CAPTCHA یا OTP</span><span class="story-case-goal">پاسخ به همان عملیات متوقف‌شده</span></span><span class="story-status">آفلاین؛ زنده باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">سامانهٔ بیرونی</span><span class="story-step-action">در میانهٔ عملیات، چالش ورود می‌خواهد.</span><span class="story-step-place">وب‌سایت و Adapter همان اتصال</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">شناسه و وضعیت ادامهٔ همان عملیات را نگه می‌دارد.</span><span class="story-step-place"><code>access</code> و <code>study_continue</code></span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">نوع challenge را توضیح می‌دهد؛ OTP ادامه‌پذیر است و reCAPTCHA با وضعیت `challenge_unavailable` متوقف می‌شود.</span><span class="story-step-place">CLI یا سایت بیرونی؛ بر اساس نوع challenge</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">OTP را در CLI وارد می‌کند یا برای reCAPTCHA دستی در سایت ادامه می‌دهد؛ پاسخ reCAPTCHA به نشست API منتقل نمی‌شود.</span><span class="story-step-place">CLI یا سایت بیرونی</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد و سامانه</span><span class="story-step-action">پاسخ OTP را به continuation معتبر می‌دهد؛ reCAPTCHA موفقیت API ادعا نمی‌کند و تلاش تازه فقط با درخواست صریح کاربر شروع می‌شود.</span><span class="story-step-place"><code>study_continue</code> و Adapter</span></div></li></ol><p class="story-case-note">مرز reCAPTCHA عمداً توقف روشن دارد؛ تکرار challenge در تلاش تازه نیز متوقف می‌شود.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>ادامه فقط برای همان challenge معتبر انجام شود؛ حالت پشتیبانی‌نشده آشکار بماند.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>reCAPTCHA به نشست HTTP محلی منتقل نمی‌شود؛ رفتار اقدام دستی و توقف با `challenge_unavailable` پیاده شده است. پذیرش زندهٔ این حالت باز است.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-04</span><span><span class="story-case-title">مرور وضعیت تکلیف‌ها</span><span class="story-case-goal">تشخیص عقب‌افتاده، نزدیک و نامعلوم</span></span><span class="story-status">گزارش مشترک؛ همسانی باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">می‌پرسد چه تکلیف‌هایی نیاز به توجه دارند.</span><span class="story-step-place">گفت‌وگوی Codex یا فرمان گزارش</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex یا CLI</span><span class="story-step-action">نمای محلی را از API یا گزارش می‌خواند.</span><span class="story-step-place"><code>study_view</code> / <code>status</code></span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">مهلت عادی/اضافه و وضعیت‌های محلی را جدا دسته‌بندی می‌کند.</span><span class="story-step-place">مدل خواندن؛ دادهٔ ثبت‌شدهٔ محلی</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">نامعلوم را از تحویل‌نشده جدا توضیح می‌دهد و موارد را اولویت‌بندی می‌کند.</span><span class="story-step-place">گفت‌وگو</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">تکلیف بعدی را برای ادامه انتخاب می‌کند.</span><span class="story-step-place">گفت‌وگو یا CLI</span></div></li></ol><p class="story-case-note">وضعیت محلی، تأیید وضعیت فعلی ارسال در سامانهٔ بیرونی نیست.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>نامعلوم جدا از تحویل باشد و زمان وضعیت دیده شود.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>`study report` نمای مشترک دارد؛ `status/gaps/report/brief` legacy عمداً CW-only هستند. همسانی کامل freshness و وضعیت تحویل هنوز باز است.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-05</span><span><span class="story-case-title">پیوند کلاس و تعیین نیم‌سال</span><span class="story-case-goal">گروه‌بندی روشن درس‌ها و بایگانی</span></span><span class="story-status">آفلاین؛ دادهٔ زنده باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">فهرست کلاس‌ها را بررسی و کلاس/درس مقصد یا وضعیت را انتخاب می‌کند.</span><span class="story-step-place">ترمینال تعاملی `cwtrack study`</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">CLI</span><span class="story-step-action">نام سامانه و کلاس را نشان می‌دهد و شناسهٔ داخلی را پنهان می‌کند.</span><span class="story-step-place"><code>_study_management</code></span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">پیوند درس یا حالت جاری/بایگانی/نامشخص را با revision ذخیره می‌کند.</span><span class="story-step-place"><code>course_link</code>، <code>class_tracking</code>، `catalog`</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">داشبورد</span><span class="story-step-action">برای درس پیوندخورده یک کارت می‌سازد؛ کلاس بی‌نگاشت و بایگانی را جدا نشان می‌دهد.</span><span class="story-step-place">نمای محلی؛ منشأ تکلیف حفظ می‌شود</span></div></li></ol><p class="story-case-note">پیوند خودکار دادهٔ قدیمی فقط برای شناسهٔ دقیقاً برابر با یک کلاس یکتا مجاز است.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>پیوند و وضعیت نیم‌سال صریح بماند و مبدأ هر تکلیف حفظ شود.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>قواعد کد آزموده‌اند؛ تطبیق با کلاس‌های واقعی نیازمند پذیرش دادهٔ زنده است.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-06</span><span><span class="story-case-title">بررسی تازگی و پوشش</span><span class="story-case-goal">«پیدا نشد» با «وجود ندارد» اشتباه نشود</span></span><span class="story-status">آفلاین؛ زنده باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">می‌پرسد آیا دریافت این کلاس کامل و تازه است.</span><span class="story-step-place">گفت‌وگوی Codex یا داشبورد</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">نمای پوشش را به تفکیک سامانه و کلاس می‌خواند.</span><span class="story-step-place"><code>study_view</code></span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">زمان، نتیجه، کلاس بررسی‌شده و خطای هر اتصال را کنار هم می‌گذارد.</span><span class="story-step-place">`catalog` و وضعیت coverage</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">کامل، ناقص، قدیمی، بدون اتصال یا نیازمند پیوند را معنی می‌کند.</span><span class="story-step-place">گفت‌وگو با استناد به زمان ثبت‌شده</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">در صورت نیاز دریافت تازه یا تعیین پیوند را درخواست می‌کند.</span><span class="story-step-place">گفت‌وگو یا CLI</span></div></li></ol><p class="story-case-note">شکست دریافت جدید، آخرین مشاهدهٔ موفق را حذف نمی‌کند.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>coverage و زمان هر کلاس/سامانه وضعیت نبودن داده را از نبودن اتصال جدا کند.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>پذیرش زنده لازم است تا محدودهٔ واقعی پیمایش Adapterها تأیید شود.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-07</span><span><span class="story-case-title">انتخاب تکلیف و آماده‌سازی ورودی</span><span class="story-case-goal">مقایسهٔ شواهد؛ گروه پس از تأیید</span></span><span class="story-status">قاعده تأیید؛ آزمون پیاده‌سازی</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">می‌خواهد تکلیف‌های مشابه در سامانه‌ها مقایسه شوند.</span><span class="story-step-place">گفت‌وگوی Codex</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">TaskRef هر نامزد را با collect_assignment می‌خواند و عنوان، سؤال، خروجی و پیوست‌های خوانا را مقایسه می‌کند.</span><span class="story-step-place">API و Adapter هر سامانه</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">موارد یکسان، متفاوت و ناخوانا را همراه مهلت و وضعیت جدا نشان می‌دهد و از دانشجو می‌پرسد آیا یک تکلیف‌اند.</span><span class="story-step-place">گفت‌وگوی Codex</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">یکسان‌بودن را تأیید یا رد می‌کند؛ ابهام همچنان جدا می‌ماند.</span><span class="story-step-place">تأیید انسانی</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack و داشبورد</span><span class="story-step-action">پس از تأیید یک گروه می‌سازند و برای هر سامانه کارت، مهلت، تحویل و Work جدا نگه می‌دارند.</span><span class="story-step-place">assignment_relate و dashboard</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو و Codex</span><span class="story-step-action">انتشار دقیق را برای کار انتخاب می‌کنند؛ هر Work با TaskRef خودش ادامه می‌یابد.</span><span class="story-step-place">study_prepare و work</span></div></li></ol><p class="story-case-note">شباهت عنوان به‌تنهایی یکسان‌بودن را ثابت نمی‌کند؛ گروه فقط پس از تأیید دانشجو ساخته می‌شود.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>کار فقط با TaskRef روشن شروع شود؛ prompt و پیوست یا کمبودشان ثبت شود.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>دانشجو قاعدهٔ مقایسه و تأیید پیش از گروه‌بندی را پذیرفت؛ آزمون آفلاین پیاده‌سازی ثبت می‌شود.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-08</span><span><span class="story-case-title">ثبت، snapshot و استفاده از منبع</span><span class="story-case-goal">تفکیک ثبت منبع از خواندن آن</span></span><span class="story-status">آفلاین؛ پذیرش قالب باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو یا Codex</span><span class="story-step-action">منبع رسمی/تکمیلی و محل یا بخش مرتبط را مشخص می‌کند.</span><span class="story-step-place">گفت‌وگو، فایل محلی یا منبع سامانه</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">منبع را به درس/تکلیف وصل می‌کند؛ محتوا را جداگانه snapshot می‌گیرد.</span><span class="story-step-place"><code>resource_attach</code> و <code>resource_capture</code></span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">محتوای snapshot موجود را باز می‌کند و بخش واقعاً استفاده‌شده را تعیین می‌کند.</span><span class="story-step-place">workspace و مهارت مربوط به تکلیف</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">شناسهٔ snapshot و extent اعلام‌شده را به نسخهٔ کار پیوند می‌دهد.</span><span class="story-step-place"><code>work_save</code> و تاریخچهٔ تغییرناپذیر</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">درستی منبع یا محدودیت استخراج را بازبینی می‌کند.</span><span class="story-step-place">گفت‌وگو و فایل منبع</span></div></li></ol><p class="story-case-note">ثبت، دریافت محتوا و استفاده سه مرحلهٔ مستقل‌اند؛ پشتیبانی استخراج به قالب منبع بستگی دارد.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>snapshot واقعی و بخش استفاده‌شده به نسخهٔ همان کار وصل شود.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>TXT/MD/CSV متنی استخراج می‌شوند؛ PDF/Office/اسلاید/تصویر به Codex واگذار می‌شوند و نوع ناشناخته `needs_extraction` است. CLI منابع پیاده شده؛ پذیرش قالب‌ها باز است.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-09</span><span><span class="story-case-title">تهیه و ذخیرهٔ پاسخ</span><span class="story-case-goal">ادامهٔ قابل‌پیگیری برای هر تکلیف</span></span><span class="story-status">ارزیابی Codex باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">صورت سؤال، قیود و منابع خوانده‌شده را به بریف و برنامه تبدیل می‌کند.</span><span class="story-step-place">مهارت مرتبط در گفت‌وگوی Codex</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">دادهٔ واقعی، ترجیح یا تصمیم شخصیِ لازم را می‌دهد.</span><span class="story-step-place">گفت‌وگو؛ داده حدس زده نمی‌شود</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex و ابزار محلی</span><span class="story-step-action">پاسخ و فایل‌های خواسته‌شده را در پوشهٔ همان کار می‌سازند.</span><span class="story-step-place">workspace و ابزارهای ساخت/اجرا</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">نسخهٔ پاسخ، پرسش‌های باز، فرض‌ها و منابع استفاده‌شده را ذخیره می‌کند.</span><span class="story-step-place"><code>work_save</code> و <code>work</code></span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">نسخه‌ها را نگه می‌دارد و با تغییر ورودی، بررسی‌های متأثر را منقضی می‌کند.</span><span class="story-step-place">تاریخچهٔ محلی و fingerprint</span></div></li></ol><p class="story-case-note">ذخیرهٔ نسخه، تأیید علمی یا کامل‌بودن پاسخ نیست.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>نسخهٔ مستقل، ورودی‌ها، منابع، فرض‌ها و پرسش‌های باز قابل‌بازیابی باشند.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>سناریوی پالودهٔ US-09 ثبت شده؛ checklist انسانی هنوز در انتظار بازبینی است. این شاهد کیفیت علمی پاسخ را تضمین نمی‌کند.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-10</span><span><span class="story-case-title">ساخت و بررسی خروجی</span><span class="story-case-goal">آماده‌سازی برای بازبینی دانشجو</span></span><span class="story-status">ارزیابی Codex باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">قالب، محدودیت و معیارهای بررسی را از صورت سؤال استخراج می‌کند.</span><span class="story-step-place">بریف کار</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">ابزار محلی</span><span class="story-step-action">فایل خروجی را می‌سازد، اجرا یا رندر می‌کند.</span><span class="story-step-place">ابزارهای پروژه روی دستگاه</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">فایل واقعی را با معیارها می‌سنجد و نتیجهٔ بررسی را ثبت می‌کند.</span><span class="story-step-place">خروجی ابزار و <code>work_save</code></span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">فایل، نقش و fingerprint نسخهٔ بررسی‌شده را نگه می‌دارد.</span><span class="story-step-place"><code>work_finish</code> و سابقهٔ شواهد</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">اگر ورودی یا بررسی لازم کم باشد، کار را نیازمند تکمیل نگه می‌دارد.</span><span class="story-step-place">وضعیت آمادگی محلی</span></div></li></ol><p class="story-case-note">نوع آزمون تابع تکلیف است؛ آمادهٔ بازبینی به معنی درستی مطلق نیست.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>check به فایل و fingerprint فعلی وصل شود؛ check ناموفق آمادگی را متوقف کند.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>سناریوی پالودهٔ US-10 ثبت شده؛ checklist انسانی هنوز در انتظار بازبینی است و پذیرش بررسی ناموفق/فایل تغییرکرده کامل نیست.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-11</span><span><span class="story-case-title">بازبینی و تحویل انسانی</span><span class="story-case-goal">تصمیم و بارگذاری نهایی با دانشجو</span></span><span class="story-status">اقدام انسانی عمدی</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">مسیر خروجی و وضعیت آماده‌بودن/محدودیت‌ها را ارائه می‌کند.</span><span class="story-step-place">گزارش کار و پوشهٔ خروجی</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex</span><span class="story-step-action">فایل‌ها و موارد بررسی‌نشده را برای دانشجو روشن می‌کند.</span><span class="story-step-place">گفت‌وگو و پیوند فایل محلی</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">خروجی را می‌خواند، اصلاح می‌کند و دربارهٔ ارسال تصمیم می‌گیرد.</span><span class="story-step-place">فایل‌خوان/ویرایشگر محلی</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">در صورت تصمیم به ارسال، فایل را خودش بارگذاری می‌کند.</span><span class="story-step-place">مرورگر CW یا کوئرا</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">سامانهٔ بیرونی</span><span class="story-step-action">ارسال را می‌پذیرد یا رد می‌کند؛ نتیجه با دریافت بعدی قابل‌مشاهده می‌شود.</span><span class="story-step-place">CW/کوئرا، خارج از cwtrack</span></div></li></ol><p class="story-case-note">cwtrack به سامانه تکلیف بارگذاری نمی‌کند و آماده‌بودن محلی را ارسال‌شده تلقی نمی‌کند.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>مسیر خروجی و محدودیت‌ها روشن باشد و ارسال از آمادگی محلی جدا بماند.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>بازبینی و بارگذاری دانشجو عمدی است؛ ارسال خودکار در دامنه نیست.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-12</span><span><span class="story-case-title">علامت‌گذاری تکلیف‌های مرتبط</span><span class="story-case-goal">رابطه بدون ادغام هویت و وضعیت</span></span><span class="story-status">سناریوی پالوده؛ بازبینی انسانی باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">تکلیف‌هایی را که از نظر موضوع/پروژه مرتبط‌اند مشخص می‌کند.</span><span class="story-step-place">گفت‌وگو یا جریان مدیریت</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex یا CLI</span><span class="story-step-action">ارجاع‌های هر تکلیف را جداگانه جمع می‌کند و دلیل رابطه را می‌فرستد.</span><span class="story-step-place"><code>assignment_relate</code></span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">رابطه را به‌عنوان پیوند جدا ثبت می‌کند.</span><span class="story-step-place">`catalog` و revision</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">نمای محلی</span><span class="story-step-action">رابطه را برای مرور نشان می‌دهد، اما کار و وضعیت هر تکلیف را جدا نگه می‌دارد.</span><span class="story-step-place"><code>study_view</code> / داشبورد</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">هر تکلیف را مستقل ادامه می‌دهد یا تحویل می‌دهد.</span><span class="story-step-place">جریان کار خودش</span></div></li></ol><p class="story-case-note">رابطه، پاسخ، مهلت یا وضعیت ارسال را با هم ادغام نمی‌کند.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>رابطه با refs صریح ثبت شود و کار/مهلت/تحویل ادغام نشوند.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>سناریوی پالودهٔ US-12 ثبت شده؛ checklist انسانی هنوز در انتظار بازبینی است.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-13</span><span><span class="story-case-title">داشبورد و گزارش محلی</span><span class="story-case-goal">مرور خواندنیِ داده‌های ثبت‌شده</span></span><span class="story-status">گزارش مشترک؛ همسانی باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">گزارش یا صفحهٔ مرور را درخواست می‌کند.</span><span class="story-step-place">CLI یا گفت‌وگوی Codex</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">Codex یا CLI</span><span class="story-step-action">مدل خواندن را می‌گیرد و در صورت درخواست فایل داشبورد می‌سازد/باز می‌کند.</span><span class="story-step-place"><code>study_view</code>، <code>build_dashboard</code> یا `cwtrack ui`</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">کد cwtrack</span><span class="story-step-action">دادهٔ محلی را به HTML یا گزارش خواندنی تبدیل می‌کند.</span><span class="story-step-place">Read model و renderer</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">مرورگر</span><span class="story-step-action">فایل تولیدشده را نمایش می‌دهد؛ برای همین کار شبکه یا حل تکلیف انجام نمی‌دهد.</span><span class="story-step-place">مرورگر محلی</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">موارد و محدودیت تازگی داده را مرور می‌کند.</span><span class="story-step-place">داشبورد/گزارش</span></div></li></ol><p class="story-case-note">تازه‌سازی، گزارش و رندر عملیات‌های جدا هستند؛ نمایش صفحه به معنی دریافت تازه نیست.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>داشبورد فقط از مدل خواندن ساخته شود و عملیات شبکه انجام ندهد.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>`study report` نمای مشترک دارد؛ legacyهای `status/gaps/report/brief` عمداً CW-only هستند. همسانی freshness و تحویل میان قالب‌های گزارش هنوز باز است.</span></div></div></details>
+
+          <details class="story-case"><summary><span class="story-id">US-14</span><span><span class="story-case-title">کار با CLI</span><span class="story-case-goal">اجرای کارها بدون گفت‌وگوی Codex</span></span><span class="story-status">آفلاین؛ پذیرش مسیرها باز</span></summary><ol class="story-steps"><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">فرمان مناسب را در ترمینال اجرا می‌کند.</span><span class="story-step-place">`cwtrack connect/fetch/study/report/ui`</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">CLI</span><span class="story-step-action">فقط برای عملیات تعاملی ورودی پنهان/انتخاب می‌گیرد و اعتبار را بررسی می‌کند.</span><span class="story-step-place"><code>cli.py</code></span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">API و ماژول دامنه</span><span class="story-step-action">درخواست را اجرا و دادهٔ محلی یا نتیجهٔ اتصال را می‌خواند/ثبت می‌کند.</span><span class="story-step-place"><code>cwtrack.api</code> و ماژول‌های دامنه</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">CLI</span><span class="story-step-action">نتیجه و خطا را به شکل خروجی ترمینال نمایش می‌دهد.</span><span class="story-step-place">لایهٔ ارائه</span></div></li><li class="story-step"><div class="story-step-card"><span class="story-step-actor">دانشجو</span><span class="story-step-action">نتیجه را می‌بیند و برای چالش/ابهام مرحلهٔ لازم را انجام می‌دهد.</span><span class="story-step-place">ترمینال یا سامانهٔ بیرونی</span></div></li></ol><p class="story-case-note">CLI با Codex فرق دارد، اما برای قابلیت‌های مشترک همان API و قواعد دامنه را به‌کار می‌برد.</p><div class="story-proof"><div><strong>معیار پایان</strong><span>فرمان‌های دامنه از API مشترک عبور کنند و ورودی حساس در CLI امن گرفته شود.</span></div><div><strong>شاهد یا کار باقی‌مانده</strong><span>فرمان‌های چندسامانه‌ای account/study/resource/relation/work پیاده شده‌اند؛ پذیرش تعاملی واقعی و پوشش کامل زیرفرمان‌ها باز است.</span></div></div></details>
+        </div>
+      </section>
+
+      <section id="course" aria-labelledby="course-title">
+        <div class="section-head"><div><p class="eyebrow">مدل درس</p><h2 id="course-title">کلاس سامانه با درس یکی نیست</h2></div><p>یک درس می‌تواند چند کلاس سامانه داشته باشد. پیوند با تصمیم دانشجو ثبت می‌شود.</p></div>
+        <div class="course-map" role="img" aria-label="کلاس‌های CW و کوئرا با پیوند صریح به یک درس نیم‌سال متصل می‌شوند و تکالیف منشأ خود را نگه می‌دارند">
+          <div class="map-column map-column--platforms">
+            <p class="map-caption">کلاس‌های سامانه</p>
+            <div class="map-node"><strong>CW · کلاس ۱</strong><small>داده و تکلیف‌های CW</small></div>
+            <div class="map-node"><strong>کوئرا · کلاس ۲</strong><small>داده و تکلیف‌های کوئرا</small></div>
+          </div>
+          <div class="map-join" aria-hidden="true">←</div>
+          <div class="map-column">
+            <p class="map-caption">پیوند صریح</p>
+            <div class="map-node map-node--focus"><strong>درسِ نیم‌سال</strong><small>مثلاً فیزیک · نیم‌سال جاری</small></div>
+          </div>
+          <div class="map-join" aria-hidden="true">←</div>
+          <div class="map-column">
+            <p class="map-caption">نمای دانشجو</p>
+            <div class="map-node"><strong>یک کارت درس</strong><small>تکلیف CW و کوئرا جدا با نام مبدأ</small></div>
+          </div>
+          <div class="map-branch">
+            <div class="map-node map-node--loose"><strong>کلاس بی‌نگاشت</strong><small>جدا می‌ماند تا دانشجو تعیین تکلیف کند.</small></div>
+            <div class="map-node map-node--loose"><strong>نامشخص یا بایگانی</strong><small>از درس‌های جاری جدا و قابل مرور است.</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="work" aria-labelledby="work-title">
+        <div class="section-head"><div><p class="eyebrow">حافظهٔ انجام کار</p><h2 id="work-title">پاسخ محلی چگونه قابل پیگیری می‌ماند؟</h2></div></div>
+        <div class="term-flow" role="img" aria-label="سؤال به ورودی نسخه‌دار، پاسخ و بررسی وصل می‌شود و در پایان فایل آمادهٔ بازبینی دانشجو می‌شود">
+          <div class="term-node"><h3>ورودی ثابت</h3><p>سؤال، مهلت، پیوست و منابع استفاده‌شده</p></div>
+          <div class="term-arrow" aria-hidden="true">←</div>
+          <div class="term-node"><h3>نسخهٔ پاسخ</h3><p>فایل‌ها، اصلاح‌ها و پرسش‌های باز</p></div>
+          <div class="term-arrow" aria-hidden="true">←</div>
+          <div class="term-node"><h3>شواهد بررسی</h3><p>نتیجهٔ کنترل و فایل واقعاً بررسی‌شده</p></div>
+          <div class="term-states">
+            <div class="state state--ok"><span class="state-symbol">OK</span><span><strong>آمادهٔ بازبینی</strong><small>برای خواندن دانشجو</small></span></div>
+            <div class="state state--warn"><span class="state-symbol">…</span><span><strong>نیازمند تکمیل</strong><small>ورودی یا بررسی کم است</small></span></div>
+            <div class="state state--bad"><span class="state-symbol">!</span><span><strong>تحویل سامانه نیست</strong><small>بارگذاری هنوز انسانی است</small></span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="modules" aria-labelledby="modules-title">
+        <div class="section-head"><div><p class="eyebrow">نقشهٔ کد</p><h2 id="modules-title">درون برنامه چه اتفاقی می‌افتد؟</h2></div><p>هر لایه یک نوع کار را مالک است؛ داشبورد داده را نمایش می‌دهد و خودش تصمیم نمی‌گیرد.</p></div>
+        <div class="architecture" role="img" aria-label="لایه‌های معماری cwtrack از ورودی‌ها تا هماهنگ‌کننده، ماژول‌های دامنه، adapterها و ذخیره‌سازی">
+          <div class="arch-layer"><span class="arch-layer-label">ورودی</span><div class="arch-nodes"><div class="arch-node arch-node--entry"><strong>دانشجو</strong><small>تصمیم و ورودی</small></div><div class="arch-node arch-node--entry"><strong>Codex</strong><small>درخواست طبیعی و API</small></div><div class="arch-node arch-node--entry"><strong>CLI</strong><small>فرمان و انتخاب</small></div></div></div>
+          <div class="arch-arrows" aria-hidden="true">↓</div>
+          <div class="arch-layer"><span class="arch-layer-label">هماهنگی</span><div class="arch-nodes"><div class="arch-node"><strong>API</strong><small>درگاه ساخت‌یافته</small></div><div class="arch-node"><strong>Study</strong><small>تازه‌سازی و آماده‌سازی</small></div></div></div>
+          <div class="arch-arrows" aria-hidden="true">↓</div>
+          <div class="arch-layer"><span class="arch-layer-label">مالک‌های دامنه</span><div class="arch-nodes"><div class="arch-node arch-node--owner"><strong>Catalog</strong><small>کلاس و پیوند</small></div><div class="arch-node arch-node--owner"><strong>Access</strong><small>ورود امن</small></div><div class="arch-node arch-node--owner"><strong>Resources</strong><small>منابع و snapshot</small></div><div class="arch-node arch-node--owner"><strong>Work</strong><small>پاسخ و نسخه‌ها</small></div></div></div>
+          <div class="arch-arrows" aria-hidden="true">↓</div>
+          <div class="arch-layer"><span class="arch-layer-label">مرز بیرونی</span><div class="arch-nodes"><div class="arch-node"><strong>Adapterهای CW / کوئرا</strong><small>ترجمهٔ سایت به مدل داخلی</small></div><div class="arch-node"><strong>Read model</strong><small>نمایش مشترک</small></div><div class="arch-node"><strong>داشبورد و گزارش</strong><small>فقط خواندن و نمایش</small></div></div></div>
+        </div>
+      </section>
+
+      <section aria-labelledby="refactor-title">
+        <div class="section-head"><div><p class="eyebrow">وضعیت ماژول‌بندی</p><h2 id="refactor-title">از کد متمرکز به مرزهای روشن</h2></div><p>این سمت، هدف refactor است؛ هنوز همهٔ آن در کد انجام نشده.</p></div>
+        <div class="refactor-map" role="img" aria-label="سمت چپ وضعیت فعلی شامل API و داشبورد بزرگ و مسیر قدیمی است؛ سمت راست API نازک و مالک‌های دامنه را نشان می‌دهد">
+          <div class="refactor-side"><h3>الان</h3><div class="refactor-node"><strong>api.py</strong><small>چند حوزه کنار هم</small></div><div class="refactor-node"><strong>dashboard.py</strong><small>نمایش و بخشی از منطق</small></div><div class="refactor-node"><strong>مسیر قدیمی CW</strong><small>هم‌زیستی با مدل جدید</small></div></div>
+          <div class="refactor-arrow" aria-hidden="true">←</div>
+          <div class="refactor-side"><h3>جهت هدف</h3><div class="refactor-node"><strong>API و Study</strong><small>ورودی باریک و هماهنگی</small></div><div class="refactor-node"><strong>Catalog · Access · Resources · Work</strong><small>مالکیت‌های جدا</small></div><div class="refactor-node"><strong>Read model و Renderer</strong><small>خواندن و نمایش جدا</small></div></div>
+        </div>
+      </section>
+
+      <section id="storage" aria-labelledby="storage-title">
+        <div class="section-head"><div><p class="eyebrow">محل داده</p><h2 id="storage-title">هر نوع داده کجا نگهداری می‌شود؟</h2></div></div>
+        <div class="storage-map" role="list">
+          <div class="storage-row" role="listitem"><span class="storage-thing">مشاهده و پیوند کلاس‌ها</span><span class="storage-arrow" aria-hidden="true">←</span><code>cw-data/catalog-v2/</code></div>
+          <div class="storage-row" role="listitem"><span class="storage-thing">پاسخ، نسخه و خروجی</span><span class="storage-arrow" aria-hidden="true">←</span><code>work/&lt;work_id&gt;/</code></div>
+          <div class="storage-row" role="listitem"><span class="storage-thing">راز ورود</span><span class="storage-arrow" aria-hidden="true">←</span><span>مخزن امن دستگاه</span></div>
+          <div class="storage-row" role="listitem"><span class="storage-thing">دادهٔ قدیمی و dump</span><span class="storage-arrow" aria-hidden="true">←</span><code>cw-data/ · .cw/</code></div>
+        </div>
+      </section>
+
+      <section aria-labelledby="freshness-title">
+        <div class="section-head"><div><p class="eyebrow">تازگی داده</p><h2 id="freshness-title">دریافت ناموفق یعنی داده نداریم؟ نه</h2></div><p>آخرین دریافت موفق حفظ می‌شود؛ وضعیت تازه جدا گزارش می‌شود.</p></div>
+        <div class="term-states">
+          <div class="state state--ok"><span class="state-symbol">OK</span><span><strong>بررسی شد</strong><small>زمان و پوشش آخرین دریافت ثبت است</small></span></div>
+          <div class="state state--warn"><span class="state-symbol">…</span><span><strong>ناقص یا قدیمی</strong><small>محدودیت دریافت آشکار می‌ماند</small></span></div>
+          <div class="state state--bad"><span class="state-symbol">?</span><span><strong>بدون اتصال یا نامزد</strong><small>به‌جای «چیزی وجود ندارد» نشان داده می‌شود</small></span></div>
+        </div>
+      </section>
+
+      <section class="closing" aria-label="قاعدهٔ پایانی">
+        <strong>cwtrack پاسخ را آماده می‌کند؛ تو دربارهٔ تحویل تصمیم می‌گیری.</strong>
+        <p>آماده‌بودن برای بازبینی، تضمین درستی مطلق یا ثبت تکلیف در CW و کوئرا نیست.</p>
+        <p><a href="product-workflows.md">داستان‌های کاربر</a> · <a href="module-architecture.md">جزئیات معماری و برنامهٔ ماژولارکردن</a></p>
+      </section>
+    </main>
+    <footer>نقشهٔ تصویری معماری و روندهای cwtrack</footer>
+  </div>
+  <script>
+    const themePreference = window.matchMedia('(prefers-color-scheme: dark)');
+    const applyTheme = () => { document.documentElement.dataset.theme = themePreference.matches ? 'dark' : 'light'; };
+    applyTheme();
+    themePreference.addEventListener('change', applyTheme);
+  </script>
+</body>
+</html>

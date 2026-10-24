@@ -20,8 +20,9 @@
  */
 import { readFileSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = resolve(dirname(new URL(import.meta.url).pathname), '..');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arg = (name) => (process.argv.find(a => a.startsWith(`--${name}=`)) || '').split('=')[1]
   || (process.argv.includes(`--${name}`) ? process.argv[process.argv.indexOf(`--${name}`) + 1] : null);
 const out = arg('out');
@@ -121,6 +122,7 @@ const GROUPS = [
   [['space', 'spacing.scale'], 'space-'],
   [['radius', 'borders.radius'], 'radius-'],
   [['borders.radius-semantic'], 'radius-'],
+  [['borders.width'], 'border-width-'],
   [['shadow', 'shadows.elevation'], 'shadow-'],
   [['shadows.inner'], 'shadow-inner-'],
   [['shadows.focus-ring'], 'shadow-focus-ring'],

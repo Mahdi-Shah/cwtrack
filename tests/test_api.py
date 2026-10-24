@@ -354,7 +354,7 @@ class TestRefreshAfterLogin:
                     return '<a href="/course/view.php?id=90000">Test course</a>'
                 if path == "/my/":
                     return "<html></html>"
-                if path == "/mod/assign/index.php":
+                if path == "/course/view.php":
                     return assignment_page
                 raise AssertionError("unexpected request: {}".format(path))
 
@@ -934,7 +934,7 @@ def test_configured_platform_account_flows_through_secure_refresh_into_shared_vi
     configured = api.access_configure(
         "quera",
         {"username": "student@example.test", "password": "private"},
-        home=home,
+        home=home, label="حساب آزمون",
     )
     refreshed = api.study_refresh(data=data, home=home)
     view = api.study_view(data=data, work=tmp_path / "work")
@@ -950,6 +950,32 @@ def test_configured_platform_account_flows_through_secure_refresh_into_shared_vi
     }
     assert view["connections"][0]["connection_id"] == configured["connection_id"]
     assert "private" not in repr(view)
+    named = api.access_view(home=home)
+    assert named["connections"] == [{
+        "platform": "quera", "label": "حساب آزمون", "origin": "https://quera.org",
+        "created_at": named["connections"][0]["created_at"], "state": "configured",
+    }]
+    assert "connection_id" not in repr(named)
+    assert "student@example.test" not in repr(named)
+
+
+def test_interactive_recaptcha_is_a_stopped_state_not_a_retryable_otp():
+    result = {
+        "status": "partial",
+        "targets": [{"connection_id": "private-id", "platform": "quera", "status": "challenge_required"}],
+        "actions": [{
+            "connection_id": "private-id", "platform": "quera",
+            "challenge": {"kind": "interactive", "display": "reCAPTCHA"},
+        }],
+    }
+
+    from cwtrack.study_application import _mark_interactive_challenges_unavailable
+
+    _mark_interactive_challenges_unavailable(result)
+
+    assert result["targets"][0]["status"] == "challenge_unavailable"
+    assert result["actions"][0]["status"] == "challenge_unavailable"
+    assert "نشست API" in result["actions"][0]["guidance"]
 
 
 def test_refresh_reports_missing_explicit_cw_account_without_dropping_quera(
@@ -1684,6 +1710,21 @@ def test_related_tasks_are_exposed_without_sharing_work_state(tmp_path):
     assert api.work_list(data=data, work=tmp_path / "work") == []
 
 
+def test_assignment_relate_exposes_student_confirmed_same_assignment_type(tmp_path):
+    refs = [
+        {"connection_id": "cw-a", "class_id": "17", "assignment_id": "812"},
+        {"connection_id": "quera-b", "class_id": "course-x", "assignment_id": "a-9"},
+    ]
+
+    result = api.assignment_relate(
+        refs, "دانشجو پس از مقایسه تأیید کرد", expected_revision=0,
+        relation_type="same_assignment", data=tmp_path / "data",
+    )
+
+    assert result["status"] == "ok"
+    assert result["relation"]["relation_type"] == "same_assignment"
+
+
 def test_dashboard_shows_linked_course_and_actual_resource_use_extent():
     from datetime import datetime
 
@@ -1762,3 +1803,38 @@ def test_dashboard_labels_explicitly_related_assignments_as_separate_work():
 
     assert page.count("هر دو دربارهٔ کلید خارجی هستند") == 2
     assert "تکلیف مرتبط؛ روند انجام مستقل" in page
+
+
+def test_dashboard_groups_student_confirmed_same_assignments_with_independent_states():
+    from datetime import datetime
+
+    from cwtrack.dashboard import build
+
+    cw_ref = {"connection_id": "cw-a", "class_id": "17", "assignment_id": "812"}
+    quera_ref = {"connection_id": "quera-b", "class_id": "course-x", "assignment_id": "a-9"}
+    page = build(
+        {"fullname": "دانشجو", "username": "student"}, [], {}, datetime(2026, 10, 17), 0,
+        has_course_data=False,
+        study_view={
+            "classes": [],
+            "connections": [],
+            "platform_assignments": [
+                {"ref": cw_ref, "class_ref": {"connection_id": "cw-a", "class_id": "17"},
+                 "platform": "cw", "title": "تمرین مشترک", "submission": {"state": "submitted"}},
+                {"ref": quera_ref, "class_ref": {"connection_id": "quera-b", "class_id": "course-x"},
+                 "platform": "quera", "title": "تمرین مشترک", "submission": {"state": "unknown"}},
+            ],
+            "assignment_relations": [{
+                "id": "same-1", "relation_type": "same_assignment",
+                "task_refs": [cw_ref, quera_ref],
+                "reason": "دانشجو پس از مقایسه تأیید کرد",
+            }],
+        },
+    )
+
+    assert page.count("تکلیف یکسان با تأیید دانشجو</b>") == 1
+    assert page.count("class='assignment-card'") == 2
+    assert "CW شریف" in page and "کوئرا" in page
+    assert "ارسال شده" in page
+    assert "وضعیت ارسال از کوئرا دریافت نمی‌شود" in page
+    assert "انجام و تحویل مستقل" in page

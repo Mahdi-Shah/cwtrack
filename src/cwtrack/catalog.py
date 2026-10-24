@@ -9,6 +9,8 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .diagnostics import is_failure_kind
+
 
 class Catalog:
     """Store complete class observations without merging platform identities."""
@@ -154,9 +156,10 @@ class Catalog:
         ]
 
     def relate_assignments(
-        self, task_refs: list[dict], reason: str, *, expected_revision: int
+        self, task_refs: list[dict], reason: str, *, expected_revision: int,
+        relation_type: str = "related",
     ) -> dict:
-        """Record an explicit relation without merging the referenced work items."""
+        """Record a student-confirmed relation without merging work records."""
         state = self._read_offerings()
         if not _valid_revision(expected_revision):
             return {"status": "invalid_input", "revision": state["revision"]}
@@ -168,6 +171,8 @@ class Catalog:
             or not all(_valid_task_ref(item) for item in task_refs)
             or not isinstance(reason, str)
             or not reason.strip()
+            or not isinstance(relation_type, str)
+            or relation_type not in {"related", "same_assignment"}
         ):
             return {"status": "invalid_input", "revision": state["revision"]}
         keyed = sorted((_task_ref_key(item), dict(item)) for item in task_refs)
@@ -181,7 +186,11 @@ class Catalog:
             if [_task_ref_key(item) for item in relation.get("task_refs", [])] == keys
         ), None)
         clean_reason = reason.strip()
-        if existing and existing["reason"] == clean_reason:
+        if (
+            existing
+            and existing["reason"] == clean_reason
+            and existing.get("relation_type", "related") == relation_type
+        ):
             return {
                 "status": "exists",
                 "relation": existing,
@@ -191,6 +200,7 @@ class Catalog:
         if existing:
             existing.update({
                 "reason": clean_reason,
+                "relation_type": relation_type,
                 "revision": existing["revision"] + 1,
                 "updated_at": now,
             })
@@ -201,6 +211,7 @@ class Catalog:
                 "id": relation_id,
                 "task_refs": normalized_refs,
                 "reason": clean_reason,
+                "relation_type": relation_type,
                 "revision": 1,
                 "created_at": now,
                 "updated_at": now,
@@ -420,6 +431,8 @@ class Catalog:
             "last_attempt_status": observation.get("status", "failed"),
             "nodes": nodes,
         }
+        if is_failure_kind(observation.get("failure_kind")):
+            record["failure_kind"] = observation["failure_kind"]
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_name(".assignments.{}.tmp".format(uuid.uuid4().hex))
         try:
@@ -440,7 +453,7 @@ class Catalog:
         for path in sorted(self._root.glob("*/classes.json")):
             record = json.loads(path.read_text(encoding="utf-8"))
             connection = record.get("connection", {})
-            records.append({
+            item = {
                 "connection_id": connection.get("id"),
                 "platform": connection.get("platform"),
                 "scope": record.get("scope"),
@@ -449,7 +462,10 @@ class Catalog:
                 "last_success_at": record.get("last_success_at"),
                 "last_success_coverage": record.get("last_success_coverage"),
                 "last_attempt_status": record.get("last_attempt_status"),
-            })
+            }
+            if connection.get("label"):
+                item["label"] = connection["label"]
+            records.append(item)
         return records
 
     def assignment_observations(self) -> list[dict]:
@@ -467,7 +483,7 @@ class Catalog:
                 or not isinstance(class_ref, dict)
             ):
                 raise ValueError("stored assignment observation is invalid: {}".format(path))
-            observations.append({
+            item = {
                 "connection_id": connection["id"],
                 "platform": connection.get("platform"),
                 "class_ref": class_ref,
@@ -476,7 +492,12 @@ class Catalog:
                 "last_attempt_status": record.get("last_attempt_status"),
                 "last_success_at": record.get("last_success_at"),
                 "last_success_coverage": record.get("last_success_coverage"),
-            })
+            }
+            if is_failure_kind(record.get("failure_kind")):
+                item["failure_kind"] = record["failure_kind"]
+            if connection.get("label"):
+                item["label"] = connection["label"]
+            observations.append(item)
         return observations
 
     def classes(self) -> list[dict]:

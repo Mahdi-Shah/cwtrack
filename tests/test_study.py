@@ -12,6 +12,8 @@ class StaticPlatform:
         self.class_title = class_title
         self.coverage = "complete"
         self.status = "ok"
+        self.assignment_status = "ok"
+        self.assignment_failure_kind = None
         self.observed_at = "2026-10-17T00:00:00Z"
         self.failure = None
 
@@ -19,13 +21,16 @@ class StaticPlatform:
         if self.failure:
             raise ConnectionError("platform is unavailable")
         if request["scope"] == "assignments":
-            return {
-                "status": "ok",
+            result = {
+                "status": self.assignment_status,
                 "scope": "assignments",
-                "coverage": "complete",
+                "coverage": "complete" if self.assignment_status == "ok" else "incomplete",
                 "observed_at": self.observed_at,
                 "nodes": [],
             }
+            if self.assignment_failure_kind:
+                result["failure_kind"] = self.assignment_failure_kind
+            return result
         return {
             "status": self.status,
             "scope": "classes",
@@ -128,6 +133,30 @@ def test_failed_refresh_keeps_last_success_and_records_the_latest_attempt(tmp_pa
             "last_attempt_status": "unavailable",
         }
     ]
+
+
+def test_refresh_exposes_only_allowlisted_assignment_failure_categories(tmp_path):
+    adapter = StaticPlatform("cw-account", "cw", "کلاس نمونه")
+    adapter.assignment_status = "unavailable"
+    adapter.assignment_failure_kind = "unexpected_response"
+    study = Study(
+        {"data": tmp_path},
+        platforms=[adapter],
+        protected_state=None,
+        content_reader=None,
+        clock=lambda: "2026-10-17T12:00:00Z",
+    )
+
+    result = study.refresh()
+    view = Study(
+        {"data": tmp_path}, platforms=[], protected_state=None, content_reader=None,
+        clock=lambda: "2026-10-17T13:00:00Z",
+    ).view()
+
+    assert result["targets"][0]["assignment_failure_counts"] == {
+        "unexpected_response": 1
+    }
+    assert view["assignment_observations"][0]["failure_kind"] == "unexpected_response"
 
 
 def test_refresh_skips_assignment_observations_for_archived_classes(tmp_path):

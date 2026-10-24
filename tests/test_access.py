@@ -113,6 +113,33 @@ def test_challenge_continues_in_a_new_manager_and_duplicate_completion_is_safe(t
     assert instances[0].resume_calls == 0
 
 
+def test_connections_support_unique_local_labels_and_legacy_generated_names(tmp_path):
+    now = "2026-10-17T12:00:00+03:30"
+    manager, _, _ = make_manager(tmp_path, clock=lambda: now)
+    first = manager.configure(
+        "quera", "https://quera.org",
+        {"username": "student@example.test", "password": "not-a-real-password"},
+        label="دانشگاه",
+    )
+    assert first["status"] == "ok"
+    assert manager.connections()[0]["label"] == "دانشگاه"
+    duplicate = manager.configure(
+        "quera", "https://quera.org",
+        {"username": "other@example.test", "password": "not-a-real-password"},
+        label="دانشگاه",
+    )
+    assert duplicate["status"] == "label_conflict"
+    legacy = manager.configure(
+        "quera", "https://quera.org",
+        {"username": "legacy@example.test", "password": "not-a-real-password"},
+    )
+    assert legacy["status"] == "ok"
+    assert manager.connections()[1]["label"] == "QUERA · اتصال 2"
+    renamed = manager.update_label_by_name("QUERA · اتصال 2", "دانشگاه دوم")
+    assert renamed == {"status": "ok", "label": "دانشگاه دوم"}
+    assert manager.connections()[1]["label"] == "دانشگاه دوم"
+
+
 def test_expired_challenge_does_not_send_the_response_to_the_site(tmp_path):
     now = ["2026-10-17T12:00:00+03:30"]
     manager, _, instances = make_manager(tmp_path, clock=lambda: now[0])

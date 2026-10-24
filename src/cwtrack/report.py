@@ -47,7 +47,7 @@ def table(rows: list[dict], now_epoch: int, local: dict[str, list[str]]) -> str:
     out = []
     for row in sorted(rows, key=lambda r: (BUCKET_ORDER.index(r["bucket"]), r["due"] or 1 << 62)):
         found = local.get("{}|{}".format(row["name"], row["course"]))
-        loc = "📄 " + _cell(found[0]) if found else ""
+        loc = "محلی: " + _cell(found[0]) if found else ""
         out.append(
             "| {} | {} | {} | {} | {} | {} |".format(
                 BUCKET_FA[row["bucket"]],
@@ -95,12 +95,12 @@ def report(rows: list[dict], local: dict[str, list[str]], now: datetime) -> str:
     ]
 
     if urgent:
-        out += ["## 🔴 فوری", "", "گذشته از مهلت، یا پنجرهٔ ارسال بسته شده و چیزی ثبت نشده.", "",
+        out += ["## فوری", "", "گذشته از مهلت، یا پنجرهٔ ارسال بسته شده و چیزی ثبت نشده.", "",
                 table(urgent, now_epoch, local), ""]
     if soon:
-        out += ["## 🟡 نزدیک", "", "کمتر از دو هفته.", "", table(soon, now_epoch, local), ""]
+        out += ["## نزدیک", "", "کمتر از دو هفته.", "", table(soon, now_epoch, local), ""]
     if local:
-        out += ["## 📄 فایل محلی پیدا شد", "",
+        out += ["## فایل محلی پیدا شد", "",
                 "ارسال نشده، ولی فایلی با نام مشابه روی دیسک هست. احتمالاً کار انجام شده و "
                 "بارگذاری فراموش شده. حتماً خودت بررسی کن.", ""]
         for row in open_rows:

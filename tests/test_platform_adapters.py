@@ -24,7 +24,8 @@ class FakeCwClient:
         if path == "/my/courses.php":
             return '<a href="/course/view.php?id=101">Algorithms</a>'
         if path == "/course/view.php" and params == {"id": 101}:
-            return "<html><h1>Algorithms</h1></html>"
+            fixture = Path(__file__).parent / "fixtures" / "course_90000_assign.html"
+            return fixture.read_text(encoding="utf-8")
         if path == "/mod/assign/index.php" and params == {"id": 101}:
             fixture = Path(__file__).parent / "fixtures" / "course_90000_assign.html"
             return fixture.read_text(encoding="utf-8")
@@ -68,6 +69,155 @@ def test_cw_adapter_observes_classes_and_assignments_with_a_private_session(tmp_
         "assignment_id": "90001",
     }
     assert assignments["observation"]["nodes"][0]["submission"]["state"]
+
+
+def test_cw_assignment_unrecognized_page_has_a_safe_failure_kind(tmp_path):
+    class UnexpectedAssignmentPage(FakeCwClient):
+        def get(self, path, params=None):
+            if path == "/course/view.php":
+                return "<html><body>unrecognized page</body></html>"
+            return super().get(path, params)
+
+    adapter = CWAdapter(
+        {"id": "cw-account", "platform": "cw", "origin": "https://cw.sharif.ir"},
+        client_factory=UnexpectedAssignmentPage,
+        challenge_root=tmp_path,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+    result = adapter.observe(
+        {"scope": "assignments", "class_ref": {"connection_id": "cw-account", "class_id": "101"}},
+        {"credentials": {"username": "student", "password": "private"}},
+    )
+
+    assert result["observation"]["status"] == "unavailable"
+    assert result["observation"]["failure_kind"] == "unexpected_response"
+
+
+def test_cw_assignments_are_read_from_the_course_page_after_legacy_index_redirects(tmp_path):
+    clients = []
+
+    class CoursePageClient(FakeCwClient):
+        def __init__(self, base):
+            super().__init__(base)
+            self.requests = []
+            clients.append(self)
+
+        def get(self, path, params=None):
+            self.requests.append((path, params))
+            if path == "/mod/assign/index.php":
+                return '<html><body><h1>Course overview</h1></body></html>'
+            if path == "/course/view.php" and params == {"id": 101}:
+                return '''
+                    <html lang="fa" dir="rtl"><body>
+                    <h1>نمونه درس</h1>
+                    <ul data-for="course_sectionlist">
+                      <li class="activity assign modtype_assign hasinfo">
+                        <a href="/mod/assign/view.php?id=90001">تکلیف نمونه</a>
+                        <p><strong>مهلت:</strong> 2026-11-01, 23:59</p>
+                      </li>
+                    </ul></body></html>
+                '''
+            if path == "/mod/assign/view.php" and params == {"id": 90001}:
+                return (
+                    "<table><tr><th>Submission status</th><td>No submission</td></tr>"
+                    "<tr><th>Grade</th><td>-</td></tr></table>"
+                )
+            return super().get(path, params)
+
+    adapter = CWAdapter(
+        {"id": "cw-account", "platform": "cw", "origin": "https://cw.sharif.ir"},
+        client_factory=CoursePageClient,
+        challenge_root=tmp_path,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+    result = adapter.observe(
+        {"scope": "assignments", "class_ref": {"connection_id": "cw-account", "class_id": "101"}},
+        {"credentials": {"username": "student", "password": "private"}},
+    )
+
+    assert result["observation"]["status"] == "ok"
+    assert result["observation"]["coverage"] == "complete"
+    assert result["observation"]["nodes"][0]["ref"]["assignment_id"] == "90001"
+    assert result["observation"]["nodes"][0]["submission"]["state"] == "No submission"
+    assert result["observation"]["nodes"][0]["evaluation"]["grade"] == "-"
+    assert ("/course/view.php", {"id": 101}) in clients[0].requests
+    assert not any(path == "/mod/assign/index.php" for path, _ in clients[0].requests)
+    assert result["observation"]["nodes"][0]["deadlines"][0]["at"].startswith("2026-11-01")
+
+
+def test_cw_course_page_with_unrelated_empty_table_is_not_complete_assignment_coverage(tmp_path):
+    class UnrelatedTableClient(FakeCwClient):
+        def get(self, path, params=None):
+            if path == "/course/view.php":
+                return "<html><table class='generaltable'><tr><th>Topic</th></tr></table></html>"
+            return super().get(path, params)
+
+    adapter = CWAdapter(
+        {"id": "cw-account", "platform": "cw", "origin": "https://cw.sharif.ir"},
+        client_factory=UnrelatedTableClient,
+        challenge_root=tmp_path,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+    result = adapter.observe(
+        {"scope": "assignments", "class_ref": {"connection_id": "cw-account", "class_id": "101"}},
+        {"credentials": {"username": "student", "password": "private"}},
+    )
+
+    assert result["observation"]["status"] == "unavailable"
+    assert result["observation"]["failure_kind"] == "unexpected_response"
+
+
+def test_cw_course_page_with_assignment_table_header_can_confirm_empty_list(tmp_path):
+    class EmptyAssignmentTableClient(FakeCwClient):
+        def get(self, path, params=None):
+            if path == "/course/view.php":
+                return (
+                    "<html><table><thead><tr><th>Name</th><th>Due</th>"
+                    "<th>Status</th></tr></thead><tbody></tbody></table></html>"
+                )
+            return super().get(path, params)
+
+    adapter = CWAdapter(
+        {"id": "cw-account", "platform": "cw", "origin": "https://cw.sharif.ir"},
+        client_factory=EmptyAssignmentTableClient,
+        challenge_root=tmp_path,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+    result = adapter.observe(
+        {"scope": "assignments", "class_ref": {"connection_id": "cw-account", "class_id": "101"}},
+        {"credentials": {"username": "student", "password": "private"}},
+    )
+
+    assert result["observation"]["status"] == "ok"
+    assert result["observation"]["coverage"] == "complete"
+    assert result["observation"]["nodes"] == []
+
+
+def test_cw_complete_course_activity_list_without_assign_modules_is_complete_empty(tmp_path):
+    class NoAssignmentActivityClient(FakeCwClient):
+        def get(self, path, params=None):
+            if path == "/course/view.php":
+                return (
+                    '<html><h1>Course</h1><ul data-for="course_sectionlist">'
+                    '<li class="course-section"><li class="activity forum modtype_forum">'
+                    '</li></li></ul></html>'
+                )
+            return super().get(path, params)
+
+    adapter = CWAdapter(
+        {"id": "cw-account", "platform": "cw", "origin": "https://cw.sharif.ir"},
+        client_factory=NoAssignmentActivityClient,
+        challenge_root=tmp_path,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+    result = adapter.observe(
+        {"scope": "assignments", "class_ref": {"connection_id": "cw-account", "class_id": "101"}},
+        {"credentials": {"username": "student", "password": "private"}},
+    )
+
+    assert result["observation"]["status"] == "ok"
+    assert result["observation"]["coverage"] == "complete"
+    assert result["observation"]["nodes"] == []
 
 
 def test_cw_partial_class_scan_identifies_the_unreadable_course(tmp_path):
@@ -151,6 +301,41 @@ class FakeQueraClient:
         return {"next_step": "otp", "user_wait": 45}
 
 
+def test_quera_assignment_unrecognized_page_has_a_safe_failure_kind(tmp_path):
+    class UnexpectedCoursePage:
+        def __init__(self, base):
+            self.base = base
+
+        def import_cookies(self, cookies):
+            self.cookies = cookies
+
+        def export_cookies(self):
+            return []
+
+        def get(self, path):
+            if path == "/course/":
+                return "https://quera.org/course/", (
+                    '<script id="__NEXT_DATA__">'
+                    '{"props":{"pageProps":{"globalServerValues":'
+                    '{"currentUser":{"is_authenticated":true}}}}}</script>'
+                )
+            return "https://quera.org/course/123/", "<html>unrecognized</html>"
+
+    adapter = QueraAdapter(
+        {"id": "quera-account", "platform": "quera", "origin": "https://quera.org"},
+        client_factory=UnexpectedCoursePage,
+        clock=lambda: "2026-10-17T12:00:00+03:30",
+    )
+    result = adapter.observe(
+        {"scope": "assignments", "class_ref": {"connection_id": "quera-account", "class_id": "123"}},
+        {"credentials": {"username": "student", "password": "private"}},
+    )
+
+    assert result["status"] == "unavailable"
+    assert result["failure_kind"] == "unexpected_response"
+    assert result["observation"]["failure_kind"] == "unexpected_response"
+
+
 def test_quera_login_returns_a_resumable_otp_challenge_without_secrets(tmp_path):
     clients = []
 
@@ -215,6 +400,15 @@ def test_quera_recaptcha_is_reported_as_interactive_not_readable(tmp_path):
     assert result["challenge"]["kind"] == "interactive"
     assert "image" not in result["challenge"]["display"]
     assert result["private_state"]["request"] == {"scope": "classes"}
+
+    resumed = adapter.resume(
+        {
+            "request": {"scope": "classes"},
+            "credentials": {"username": "student@example.test", "password": "private"},
+        },
+        {"kind": "interactive_completed"},
+    )
+    assert resumed == {"status": "challenge_unavailable"}
 
 
 def test_quera_class_links_are_scoped_to_the_authenticated_connection():
@@ -282,8 +476,8 @@ def test_quera_reads_assignments_from_the_authenticated_course_page():
                     '{"props":{"pageProps":{"globalServerValues":'
                     '{"currentUser":{"is_authenticated":true}}}}}</script>'
                 )
-            assert path == "/course/db101/"
-            return "https://quera.org/course/db101/", (
+            assert path == "/course/db101"
+            return "https://quera.org/course/db101", (
                 '<script id="__NEXT_DATA__">'
                 '{"props":{"pageProps":{"globalServerValues":'
                 '{"currentUser":{"is_authenticated":true}},"course":'
@@ -317,7 +511,7 @@ def test_quera_reads_assignments_from_the_authenticated_course_page():
 
     assert result["status"] == "ok", result
     assert result["observation"]["coverage"] == "complete"
-    assert clients[0].calls == ["/course/", "/course/db101/"]
+    assert clients[0].calls == ["/course/", "/course/db101"]
     assert result["observation"]["nodes"] == [{
         "kind": "assignment",
         "ref": {

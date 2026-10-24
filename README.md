@@ -137,6 +137,12 @@ the answer valid. The API marks work ready for student review only when required
 deliverable roles exist and successful checks match the current input and answer.
 Older brief-only projects remain available through `cwtrack brief`.
 
+## Assignment PDF templates
+
+Assignment PDFs use the approved Sharif LaTeX templates unless the assignment explicitly requires a different template or format. Codex chooses a compact exercise, exercise with cover, or project report for each assignment. Pinned upstream sources and the original Niloofar font family are cached locally; no course binding or Python dependency is added.
+
+The skill drives `api.report_templates()`, `api.report_prepare(...)` and `api.report_build(...)`. Each build preserves its full source ZIP and diagnostics beside its PDF. Build failure checkpoints `needs_completion`; successful compilation still requires visual/content checks tied to that exact build before student review. See [the report design](docs/latex-report-design.md). Run `python tools/verify_latex_reports.py` to build the real template samples, rebuild their extracted source bundles, and render review pages.
+
 ## Quera and supplementary resources
 
 The shared catalog keeps platform-scoped class and task identities, links classes to a

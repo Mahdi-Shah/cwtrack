@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 from typing import Callable
 
 from .catalog import Catalog
+from .diagnostics import is_failure_kind
 
 
 class Study:
@@ -64,6 +66,7 @@ class Study:
                 if action:
                     actions.append(action)
             if saved:
+                assignment_failures = Counter()
                 archived_refs = {
                     (
                         item["class_ref"]["connection_id"],
@@ -91,6 +94,9 @@ class Study:
                     assignment_saved = self._catalog.record_assignments(
                         connection, class_ref, assignments, attempted_at
                     )
+                    failure_kind = assignments.get("failure_kind")
+                    if is_failure_kind(failure_kind):
+                        assignment_failures[failure_kind] += 1
                     if not assignment_saved or assignments.get("status") != "ok":
                         if assignments.get("status") == "challenge_required":
                             action = _challenge_action(
@@ -100,11 +106,14 @@ class Study:
                                 actions.append(action)
                         if target_status != "challenge_required":
                             target_status = "partial"
-            targets.append({
+            target = {
                 "connection_id": connection["id"],
                 "platform": connection["platform"],
                 "status": target_status,
-            })
+            }
+            if saved and assignment_failures:
+                target["assignment_failure_counts"] = dict(assignment_failures)
+            targets.append(target)
         if not targets:
             return {"status": "unavailable", "targets": []}
         status = "ok" if all(target["status"] == "ok" for target in targets) else "partial"

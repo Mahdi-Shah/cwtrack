@@ -25,6 +25,7 @@ briefs/
 output/
 reports/
 rendered/
+tmp/
 
 # Only the dashboard, which is generated into the store and already ignored by
 # cw-data/ below. Test fixtures under tests/fixtures/ must stay tracked.

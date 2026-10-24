@@ -85,6 +85,30 @@ class TestTrackerStore:
             1 for a in items if a.bucket in ("graded", "submitted")
         )
 
+
+    def test_relation_cli_forwards_student_confirmed_same_assignment(self, tmp_path, monkeypatch):
+        from cwtrack import cli_domain
+
+        input_file = tmp_path / "relation.json"
+        input_file.write_text(json.dumps({
+            "task_refs": [{"platform": "cw", "connection_id": "c1", "class_id": "k1", "assignment_id": "a1"}],
+            "reason": "تأیید دانشجو",
+            "expected_revision": 3,
+            "relation_type": "same_assignment",
+        }, ensure_ascii=False), encoding="utf-8")
+        calls = {}
+
+        def relate(task_refs, reason, **kwargs):
+            calls.update(task_refs=task_refs, reason=reason, **kwargs)
+            return {"status": "ok"}
+
+        monkeypatch.setattr(cli_domain.api, "assignment_relate", relate)
+        result = cli_domain.run("relation", ["add", "--input-file", str(input_file), "--json"])
+
+        assert result == 0
+        assert calls["relation_type"] == "same_assignment"
+        assert calls["reason"] == "تأیید دانشجو"
+
     def test_done_agrees_with_the_per_course_totals(self, store, now_epoch):
         """Two definitions of done in one function is how they drift apart."""
         user, items = tracker.load(store)
@@ -329,6 +353,58 @@ class TestCli:
     def test_gaps_runs_offline(self, store, capsys):
         assert self._run(["gaps", "--data", str(store)]) == 0
         assert "کل 6" in capsys.readouterr().out
+
+    def test_shared_study_report_is_a_domain_command(self, store, capsys):
+        assert self._run(["study", "report", "--data", str(store)]) == 0
+        output = capsys.readouterr().out
+        assert "نمای مشترک درس‌ها و تکالیف" in output
+        assert "کلاس‌ها:" in output
+
+    def test_shared_study_report_includes_platform_state_deadline_and_course(self):
+        from cwtrack.cli_domain import _study_report_text
+
+        view = {
+            "connections": [{
+                "connection_id": "c1", "platform": "quera", "label": "دانشگاه",
+                "last_attempt_status": "ok", "last_success_coverage": "complete",
+            }],
+            "classes": [{
+                "platform": "quera",
+                "ref": {"connection_id": "c1", "class_id": "q1"},
+                "title": "کلاس شبکه",
+                "offering": {"title": "امنیت داده", "term": "۱۴۰۵"},
+                "tracking": {"state": "current"},
+            }],
+            "assignment_observations": [{
+                "connection_id": "c1", "class_ref": {"class_id": "q1"},
+                "last_attempt_at": "2026-10-19T14:00:00+03:30",
+                "last_attempt_status": "ok", "coverage": "complete",
+                "last_success_at": "2026-10-19T14:00:00+03:30",
+            }],
+            "platform_assignments": [{
+                "platform": "quera",
+                "ref": {
+                    "connection_id": "c1", "class_id": "q1", "assignment_id": "a1",
+                },
+                "title": "تمرین یک",
+                "submission": {"state": "unknown"},
+                "deadlines": [{"kind": "regular", "at": "2026-10-21T12:00:00+03:30"}],
+            }],
+        }
+
+        report = _study_report_text(view)
+
+        assert "تکلیف به تفکیک سامانه: کوئرا 1" in report
+        assert "آخرین تلاش: 2026-10-19T14:00:00+03:30" in report
+        assert "آخرین دریافت موفق: 2026-10-19T14:00:00+03:30 · تکلیف‌های مشاهده‌شده: 1" in report
+        assert "دانشگاه · امنیت داده · تمرین یک · وضعیت تحویل: نامشخص؛ سامانه وضعیت تحویل را گزارش نکرد" in report
+        assert "مهلت: ۱۴۰۵/۰۷/۲۹ ۱۲:۰۰" in report
+
+    def test_domain_help_shows_domain_actions(self, capsys):
+        with pytest.raises(SystemExit) as raised:
+            self._run(["account", "--help"])
+        assert raised.value.code == 0
+        assert "connect" in capsys.readouterr().out
 
     def test_connect_prompts_for_hidden_password_and_saves_protected_cw_account(
         self, tmp_path, monkeypatch, capsys

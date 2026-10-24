@@ -186,6 +186,23 @@ def _answer_fingerprint(sections: list[dict]) -> str:
     return _fingerprint(sections)
 
 
+def _valid_report(report) -> bool:
+    if not isinstance(report, dict) or report.get("status") not in {"prepared", "built", "failed"}:
+        return False
+    if not all(isinstance(report.get(key), str) and report[key].strip()
+               for key in ("template_id", "recipe_version", "selection_reason", "project")):
+        return False
+    if not isinstance(report.get("template_sha256"), str) or not re.fullmatch(
+        r"[0-9a-f]{64}", report["template_sha256"]
+    ):
+        return False
+    if report["status"] == "built":
+        return all(isinstance(report.get(key), str) and re.fullmatch(r"[0-9a-f]{64}", report[key])
+                   for key in ("source_digest", "source_sha256", "pdf_sha256",
+                               "input_fingerprint", "answer_fingerprint"))
+    return report["status"] != "failed" or bool(str(report.get("message", "")).strip())
+
+
 def _resource_basis_digest(uses: list[dict], requirement_id: str | None = None) -> str:
     relevant = [
         use for use in uses
@@ -204,6 +221,8 @@ def _resource_check_basis(uses: list[dict], requirements: list[dict]) -> dict:
 def _hydrate(root: Path, value: dict) -> dict:
     """Return absolute attachment paths while keeping stored paths relocatable."""
     result = dict(value)
+    if "report" in result:
+        result["report_basis_digest"] = _fingerprint(result["report"])
     result.setdefault("resource_uses", [])
     result.setdefault("resource_basis_digest", _resource_basis_digest(result["resource_uses"]))
     result.setdefault(
@@ -642,6 +661,8 @@ def save(work_id: str, progress: dict, expected_revision: int, root: Path) -> di
     _validate_id(work_id)
     if not isinstance(progress, dict):
         return {"status": "invalid_input", "message": "پیشرفت باید یک شیء باشد"}
+    if "report" in progress and not _valid_report(progress["report"]):
+        return {"status": "invalid_input", "message": "مشخصات قالب یا ساخت گزارش نامعتبر است"}
     stage = progress.get("stage")
     sections = progress.get("sections")
     questions = progress.get("open_questions")
@@ -752,7 +773,7 @@ def save(work_id: str, progress: dict, expected_revision: int, root: Path) -> di
                 "resource_basis_digest": _resource_basis_digest(resource_uses),
                 "needs_reassessment": needs_reassessment,
             }
-            for key in ("requirements", "checks", "sources", "limitations"):
+            for key in ("requirements", "checks", "sources", "limitations", "report"):
                 if key in progress:
                     value[key] = progress[key]
             value["answer_fingerprint"] = _answer_fingerprint(sections)
@@ -761,6 +782,12 @@ def save(work_id: str, progress: dict, expected_revision: int, root: Path) -> di
             )
             if sections != current.get("sections", []) and current.get("checks"):
                 value["needs_reassessment"] = True
+            if "report" in value:
+                value["report_basis_digest"] = _fingerprint(value["report"])
+                if value["report"] != current.get("report") and current.get("checks"):
+                    value["needs_reassessment"] = True
+                if value["report"]["status"] == "failed":
+                    saved_stage = value["stage"] = "needs_completion"
             path = _snapshot_path(root, work_id, revision)
             if path.exists():
                 return {"status": "conflict", "revision": current["revision"]}
@@ -776,6 +803,7 @@ def save(work_id: str, progress: dict, expected_revision: int, root: Path) -> di
         "answer_fingerprint": value["answer_fingerprint"],
         "resource_basis_digest": value["resource_basis_digest"],
         "resource_check_basis": value["resource_check_basis"],
+        **({"report_basis_digest": value["report_basis_digest"]} if "report" in value else {}),
     }
 
 
@@ -807,6 +835,18 @@ def finish(work_id: str, delivery: dict, expected_revision: int, root: Path) -> 
             checks = current.get("checks", [])
             roles = {item["role"] for item in stored_files}
             missing = []
+            report = current.get("report")
+            if report:
+                if (
+                    report.get("status") != "built"
+                    or report.get("input_fingerprint") != current.get("input_fingerprint")
+                    or report.get("answer_fingerprint") != current.get("answer_fingerprint")
+                ):
+                    missing.append("PDF این نسخهٔ پاسخ با قالب انتخاب‌شده ساخته نشده است")
+                for role, key in (("pdf", "pdf_sha256"), ("latex_source", "source_sha256")):
+                    if not any(item["role"] == role and item["sha256"] == report.get(key)
+                               for item in stored_files):
+                        missing.append("خروجی ساخته‌شده با نقش {} لازم است".format(role))
             if not note.strip():
                 missing.append("یادداشت تحویل لازم است")
             if not stored_files:
@@ -827,6 +867,7 @@ def finish(work_id: str, delivery: dict, expected_revision: int, root: Path) -> 
                     and check.get("evidence", "").strip()
                     and check.get("input_fingerprint") == current.get("input_fingerprint")
                     and check.get("answer_fingerprint") == current.get("answer_fingerprint")
+                    and (not report or check.get("report_basis_digest") == _fingerprint(report))
                     and check.get("resource_basis_digest", _resource_basis_digest([]))
                     == current.get("resource_check_basis", {}).get(
                         requirement.get("id"), _resource_basis_digest([])

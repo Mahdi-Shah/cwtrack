@@ -58,6 +58,7 @@ def test_related_assignments_require_explicit_references_and_stay_independent(tm
 
     assert related["status"] == "ok"
     assert duplicate["status"] == "exists"
+    assert related["relation"]["relation_type"] == "related"
     assert catalog.assignment_relations() == [related["relation"]]
     assert related["relation"]["task_refs"] == [cw, quera]
 
@@ -74,6 +75,10 @@ def test_related_assignments_reject_duplicates_and_stale_catalog_revisions(tmp_p
     duplicate_ref = catalog.relate_assignments(
         [task, task], "هم‌موضوع", expected_revision=0
     )
+    invalid_relation_type = catalog.relate_assignments(
+        [task, other], "همان تکلیف", expected_revision=0,
+        relation_type="maybe",
+    )
     related = catalog.relate_assignments(
         [task, other], "هم‌موضوع", expected_revision=0
     )
@@ -82,5 +87,23 @@ def test_related_assignments_reject_duplicates_and_stale_catalog_revisions(tmp_p
     )
 
     assert duplicate_ref["status"] == "invalid_input"
+    assert invalid_relation_type["status"] == "invalid_input"
     assert related["status"] == "ok"
     assert stale["status"] == "conflict"
+
+
+def test_student_confirmed_same_assignment_has_a_distinct_relation_type(tmp_path):
+    catalog = Catalog(tmp_path)
+    refs = [
+        {"connection_id": "cw-a", "class_id": "17", "assignment_id": "812"},
+        {"connection_id": "quera-b", "class_id": "course-x", "assignment_id": "a-9"},
+    ]
+
+    result = catalog.relate_assignments(
+        refs, "دانشجو پس از مقایسه تأیید کرد", expected_revision=0,
+        relation_type="same_assignment",
+    )
+
+    assert result["status"] == "ok"
+    assert result["relation"]["relation_type"] == "same_assignment"
+    assert catalog.assignment_relations() == [result["relation"]]

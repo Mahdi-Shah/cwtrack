@@ -22,7 +22,7 @@ Before writing anything into a supplied template, measure it:
 A mismatch is the single most visible tell that a document was not made by the person whose name is
 on it, and it is entirely avoidable. Never ship a document whose body font differs from the rest.
 
-To reproduce a template faithfully in PDF, write the HTML by hand with an explicit
+Only for an explicitly required non-LaTeX template, reproduce its PDF faithfully with an explicit
 `font-family: '<the course face>', …` stack. Do not assume `render.py`'s bundled Vazirmatn is
 appropriate here — it is the house face for documents you author from scratch, and the *wrong*
 choice when a course template is in play.
@@ -70,9 +70,9 @@ tanween, not shadda, not sukun, not superscript alef — and no hamza-above (``)
 `ه`. Also no tatweel (`ـ`) for stretching.
 
 ```
-وسیلهٔ      ✗     وسیله‌       ✓
-می‌شود      ✓     نموده‌ای     ✓
-مُهندسی     ✗     مهندسی      ✓
+وسیلهٔ      incorrect     وسیله‌       correct
+می‌شود      correct     نموده‌ای     correct
+مُهندسی     incorrect     مهندسی      correct
 ```
 
 Why this is a hard rule rather than a style preference: ordinary Persian writing, including
@@ -123,29 +123,15 @@ regardless of document type.
 ## Script and direction
 
 - Body is RTL. Latin technical terms stay Latin and are set LTR inside the RTL flow.
-- The PDF is set in Vazirmatn, embedded from `assets/fonts/` — no install needed, and the output is identical on any machine. Fallback faces (Tahoma, Segoe UI) were not designed for Arabic script; if you pass `--font system` you will see worse kerning.
-  **This applies only to a document you author from scratch.** If the course supplies a template,
-  use that template's face — see `## 0`.
+- Use the selected LaTeX template's face. The approved Sharif recipes include their Niloofar font files in each prepared project. Follow `latex-reports.md`; a course-supplied template's own font remains authoritative under `## 0`.
 - First occurrence of a foreign term: `ترمودینامیک (thermodynamics)` — after that, Persian is enough.
 - Prefer the established Persian academic equivalent when one exists. If not, keep the Latin term; do not coin a transliteration that a professor would not recognise.
 
 ## Numbers and digits
 
-`render.py` converts standalone ASCII digits to Persian and leaves identifiers Latin. So write the number, not the digit shape, and let the renderer decide:
+XePersian and the selected template control digit shaping. Preserve Latin identifiers and code, and use `\lr{...}` or a `latin` environment when needed. Inspect the final PDF: source spelling alone does not prove digit direction or shape.
 
-| Write | Get |
-| --- | --- |
-| `12` | `۱۲` |
-| `1404` | `۱۴۰۴` |
-| `5%` | `۵٪` |
-| `12-15` | `۱۲-۱۵` |
-| `COVID-19` | `COVID-19` (kept) |
-| `ISO-8601` | `ISO-8601` (kept) |
-| `3.14.7` | `3.14.7` (kept — dotted version) |
-
-Use `--digits latin` for a document that is mostly Latin (identifiers, code, chemistry).
-
-Decimal separator is `٫` (U+066B), not `.`. Thousand separator in prose is `٬` (U+066C). `render.py` does not rewrite separators — write them yourself when a number is Persian-typed already, and keep ASCII when it is Latin.
+Decimal and thousands separators follow the assignment's language. Write numeric literals in code and formulas with the syntax those environments require.
 
 ## ZWNJ (نیم‌فاصله)
 
@@ -176,14 +162,9 @@ than what follows.
 - Do not Persianise unit symbols. `N`, `m/s`, `kg·m⁻²`, `°C` stay as-is.
 - Keep exponents Unicode where practical (`²`, `³`, `⁻¹`) so they survive without a TeX engine.
 
-## Formulas — the important one
+## Formulas
 
-There is **no TeX engine** in the PDF pipeline. `$...$` and `\(...\)` are unwrapped and printed verbatim in an isolated LTR span; they are not typeset. So:
-
-- Write formulas **Unicode-first**, so they read correctly as plain text: `F = k·Δx`, `∫₀^∞ e^(-x²) dx`, `∂u/∂t = α∇²u`, `Σᵢ xᵢ²`
-- Reach for `$$...$$` only for genuinely multi-line layout, and then keep it to display-identifiers like `\frac{a}{b}` and `\begin{aligned}`
-- Put units in the text next to the symbol, not inside the formula
-- If the course needs real typeset math, that is the LaTeX path — see below, and ask before switching
+The default PDF workflow uses XeLaTeX. Use `$...$`, `\(...\)`, `equation` or `align` to typeset real mathematics. Keep variable names and units consistent with the assignment. For an explicit non-LaTeX exception, use that renderer's documented math support and inspect the result.
 
 ## Layout
 
@@ -192,6 +173,6 @@ There is **no TeX engine** in the PDF pipeline. `$...$` and `\(...\)` are unwrap
 - Long tables must fit A4 — if a table has more than ~7 columns, split it or transpose it
 - Any figure you draw must be generated with a script, saved as PNG or SVG, and embedded with `![caption](path)`. Never describe a figure you did not produce.
 
-## When the course wants LaTeX instead
+## LaTeX report workflow
 
-`xelatex` is available (MiKTeX). The `xepersian` route needs the Persian font stack set up and the first run triggers MiKTeX package installs, which can stall. Raise it with the student first, and expect one setup round-trip; `render.py` plus Markdown is the reliable default.
+Read `latex-reports.md`. LaTeX templates are the default for assignment PDFs. The agent may fix dependencies and adapt the approved templates while preserving their appearance. A missing compiler/package or unsuccessful build keeps the work `needs_completion`; it does not select the HTML path. Build records retain the exact template version, frozen source and diagnostics.

@@ -12,9 +12,10 @@ from typing import Callable
 
 from .. import auth
 from ..client import DEFAULT_BASE, Client, CwError
+from ..diagnostics import is_failure_kind
 from ..fetch import course_title
 from ..intake import collect_course_materials, collect_site
-from ..parse import parse_dump
+from ..parse import map_header, parse_assignment_detail, parse_dump
 
 
 class CWAdapter:
@@ -186,11 +187,11 @@ class CWAdapter:
                     self._challenge_root.parent,
                 )
             except (ConnectionError, TimeoutError, OSError, CwError, ValueError):
-                return _failed(scope, observed_at)
+                return _failed(scope, observed_at, "transport_error")
             if result.get("status") == "authentication_required":
-                return _failed(scope, observed_at)
+                return _failed(scope, observed_at, "authentication_required")
             if not isinstance(result.get("input"), dict):
-                return _failed(scope, observed_at)
+                return _failed(scope, observed_at, "unexpected_response")
             received = {
                 **result["input"],
                 "assignment_ref": task_ref,
@@ -270,20 +271,39 @@ class CWAdapter:
         class_ref = request["class_ref"]
         class_id = class_ref["class_id"]
         try:
-            page = client.get("/mod/assign/index.php", {"id": int(class_id)})
+            # The legacy assignment index now redirects to the global course
+            # overview on CW. The per-course page is the canonical source used
+            # by class discovery and contains the assignment rows.
+            page = client.get("/course/view.php", {"id": int(class_id)})
         except (ConnectionError, TimeoutError, OSError, CwError):
-            return _failed(scope, observed_at)
+            return _failed(scope, observed_at, "transport_error")
         if _login_page(page):
-            return _failed(scope, observed_at)
+            return _failed(scope, observed_at, "authentication_required")
         try:
             with tempfile.TemporaryDirectory(prefix="cwtrack-cw-parse-") as folder:
                 path = Path(folder) / "course_{}.html".format(class_id)
                 path.write_text(page, encoding="utf-8")
                 rows = parse_dump(Path(folder), datetime.now())
         except (OSError, CwError, ValueError):
-            return _failed(scope, observed_at)
-        if not rows and not _recognizable_empty_assignment_page(page):
-            return _failed(scope, observed_at)
+            return _failed(scope, observed_at, "parser_error")
+        if (
+            not rows
+            and not _recognizable_empty_assignment_page(page)
+            and (_has_assignment_activity(page) or not _recognizable_course_page(page))
+        ):
+            return _failed(scope, observed_at, "unexpected_response")
+        for row in rows:
+            if row.get("status_text") != "unknown":
+                continue
+            try:
+                detail_page = client.get(
+                    "/mod/assign/view.php", {"id": int(row["cmid"])}
+                )
+            except (ConnectionError, TimeoutError, OSError, CwError):
+                continue
+            if _login_page(detail_page):
+                continue
+            row.update(parse_assignment_detail(detail_page, datetime.now()))
         nodes = []
         for row in rows:
             due = row.get("due")
@@ -387,14 +407,17 @@ def _complete(scope: str, observed_at: str, nodes: list[dict]) -> dict:
     }
 
 
-def _failed(scope: str, observed_at: str) -> dict:
-    return {
+def _failed(scope: str, observed_at: str, failure_kind: str | None = None) -> dict:
+    result = {
         "status": "unavailable",
         "scope": scope,
         "coverage": "incomplete",
         "observed_at": observed_at,
         "nodes": [],
     }
+    if is_failure_kind(failure_kind):
+        result["failure_kind"] = failure_kind
+    return result
 
 
 def _partial(
@@ -419,13 +442,37 @@ def _login_page(page: str) -> bool:
 
 def _recognizable_empty_assignment_page(page: str) -> bool:
     lowered = page.lower()
-    return any(needle in lowered for needle in (
-        "class=\"generaltable",
-        "class='generaltable",
-        "noassignments",
-        "no assignments",
-        "موردی برای نمایش نیست",
-    ))
+    if any(needle in lowered for needle in ("noassignments", "no assignments")):
+        return True
+    for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", page, re.S | re.I):
+        cells = [
+            re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", cell)).strip()
+            for cell in re.findall(r"<t[hd]\b[^>]*>(.*?)</t[hd]>", row, re.S | re.I)
+        ]
+        header = map_header(cells)
+        if "name" in header and ("due" in header or "status" in header):
+            return True
+    return False
+
+
+def _has_assignment_activity(page: str) -> bool:
+    return bool(
+        re.search(r"\bmodtype_assign\b", page, re.I)
+        or re.search(r"mod/assign/view\.php\?id=\d+", page, re.I)
+    )
+
+
+def _recognizable_course_page(page: str) -> bool:
+    """Recognize a complete Moodle course section list as an empty assignment list."""
+    return bool(
+        re.search(r"<h1\b", page, re.I)
+        and re.search(r"data-for=[\"']course_sectionlist[\"']", page, re.I)
+        and re.search(
+            r"class=[\"'][^\"']*\bcourse-section\b[^\"']*[\"']",
+            page,
+            re.I,
+        )
+    )
 
 
 def _expires(now: str) -> str:

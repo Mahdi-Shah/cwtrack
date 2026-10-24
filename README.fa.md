@@ -33,9 +33,23 @@ cwtrack connect   # نام کاربری CW را می‌پرسد؛ رمز مخف�
 cwtrack fetch     # ورود، دانلود، ذخیره
 cwtrack ui        # باز کردن داشبورد
 cwtrack study     # پیوند کلاس‌ها به درس نیم‌سال و ثبت جاری/بایگانی/نامشخص
+cwtrack account connect --platform quera --connection "دانشگاه"
+cwtrack study refresh --platform quera
+cwtrack study view
+cwtrack study report   # نمای مشترک CW و کوئرا
+cwtrack resource view
+cwtrack relation list
+cwtrack work list
 cwtrack gaps      # چه چیزی مانده، بدترین اول
 cwtrack brief     # ساختن پوشهٔ کار برای کاری که سررسید شده
 ```
+
+فرمان‌های legacy مانند `report`, `open` و `gaps` همچنان CW-only هستند؛ فرمان‌های
+حوزه‌ای `account`, `study`, `resource`, `relation` و `work` مسیر چندسامانه‌ای را
+عرضه می‌کنند. ورودی پیچیده از `--input-file` با JSON گرفته می‌شود یا در ترمینال
+به‌صورت مرحله‌ای مسیر فایل پرسیده می‌شود. متن پاسخ، رمز و شاهد خام را در آرگومان
+فرمان ننویسید. راهنمای کامل و schemaها در
+[docs/cli-guide.fa.md](docs/cli-guide.fa.md) آمده‌اند.
 
 [English](README.md) · [MIT](LICENSE)
 
@@ -265,6 +279,12 @@ wheel جا انداخته بود، یک guard در زمان import که فقط �
   فروشگاه هست ادعا نمی‌کند.
 
 ## ساختار
+
+برای مرور محصول و معماری، [داستان‌های کاربر و روندهای کامل](docs/product-workflows.md)
+مسئول هر مرحله و محل اجرای آن را مشخص می‌کند؛ [نقشهٔ معماری ماژولار](docs/module-architecture.md)
+مرزهای فعلی، وابستگی‌های هدف و ترتیب پیشنهادی ماژولارکردن را نشان می‌دهد. برای دیدن
+همهٔ این‌ها به‌صورت تصویری و مرحله‌به‌مرحله، [راهنمای HTML](docs/architecture-guide.html)
+را باز کنید.
 
 ```
 src/cwtrack/
