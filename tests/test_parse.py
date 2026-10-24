@@ -160,6 +160,34 @@ class TestParseDump:
         cmids = [r["cmid"] for r in rows]
         assert len(cmids) == len(set(cmids))
 
+    def test_activity_list_rows_are_enriched_from_assignment_detail_pages(self, tmp_path, now):
+        dump = tmp_path / "dump"
+        dump.mkdir()
+        (dump / "course_90000.html").write_text(
+            '''<html><h1>نمونه درس</h1><ul data-for="course_sectionlist">
+            <li class="activity assign modtype_assign">
+              <a href="/mod/assign/view.php?id=90007">تمرین نمونه</a>
+              <p><strong>مهلت:</strong> 2026-11-01, 23:59</p>
+            </li></ul></html>''',
+            encoding="utf-8",
+        )
+        (dump / "assignment_90000_90007.html").write_text(
+            '''<table>
+            <tr><th>Submission status</th><td>Not submitted</td></tr>
+            <tr><th>Grading status</th><td>Not graded</td></tr>
+            <tr><th>Grade</th><td>-</td></tr>
+            </table>''',
+            encoding="utf-8",
+        )
+
+        rows = parse.parse_dump(dump, now)
+
+        assert len(rows) == 1
+        assert rows[0]["cmid"] == 90007
+        assert rows[0]["status_text"] == "Not submitted"
+        assert rows[0]["grade"] == "-"
+        assert rows[0]["due"] is not None
+
 
 class TestLocalMatch:
     def test_persian_folding_finds_the_file(self, tmp_path):

@@ -160,6 +160,9 @@ class ResourceLibrary:
         final = capture_root / capture_id
         artifact_name = "resource.bin"
         acquired_extent = {"kind": "whole_file"}
+        extraction_status = "needs_extraction"
+        extracted_name = None
+        extracted_digest = None
         try:
             temporary.mkdir()
             if kind == "file":
@@ -195,6 +198,25 @@ class ResourceLibrary:
                 acquired_extent = {"kind": "whole_resource", "url": final_url}
             else:
                 raise ValueError("resource kind cannot be captured")
+            if kind in {"file", "remote_file"}:
+                suffix = Path(artifact_name).suffix.casefold()
+                if suffix in {".txt", ".md", ".csv"}:
+                    try:
+                        text = artifact.read_text(encoding="utf-8-sig")
+                    except (UnicodeError, OSError):
+                        extraction_status = "needs_extraction"
+                    else:
+                        extracted_name = "extracted.txt"
+                        extracted = temporary / extracted_name
+                        extracted.write_text(text, encoding="utf-8")
+                        extracted_digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+                        extraction_status = "extracted"
+                elif suffix in {
+                    ".pdf", ".doc", ".docx", ".ppt", ".pptx", ".odp",
+                    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".tif", ".tiff",
+                    ".html", ".htm",
+                }:
+                    extraction_status = "needs_codex_extraction"
             digest = hashlib.sha256()
             with artifact.open("rb") as copied:
                 for chunk in iter(lambda: copied.read(1024 * 1024), b""):
@@ -213,9 +235,13 @@ class ResourceLibrary:
             "artifact_path": (final / artifact_name).relative_to(self._data).as_posix(),
             "requested_extent": extent,
             "acquired_extent": acquired_extent,
+            "extraction_status": extraction_status,
             "status": "captured",
             "captured_at": self._clock(),
         }
+        if extracted_name:
+            record["extracted_path"] = (final / extracted_name).relative_to(self._data).as_posix()
+            record["extracted_sha256"] = extracted_digest
         manifest["captures"].append(record)
         manifest["revision"] += 1
         self._write(manifest)

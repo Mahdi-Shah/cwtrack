@@ -2,7 +2,7 @@
 
 Read the type off the assignment, not off your assumption. When two types fit, ask — a lab report and an essay look nothing alike in structure even when the topic matches.
 
-At intake, the format comes from the assignment text first: `در قالب Word` → `.docx`, `فایل PDF` → PDF, `حداکثر دو صفحه` → a page budget, `اسلاید پاورپوینت` → slides. **If the assignment says nothing, deliver PDF** via `scripts/render.py`.
+At intake, the format comes from the assignment text first: `در قالب Word` → `.docx`, `فایل PDF` → PDF, `حداکثر دو صفحه` → a page budget, `اسلاید پاورپوینت` → slides. **If the assignment says nothing, deliver PDF** using the approved LaTeX template workflow in `latex-reports.md`. An explicit different template or format takes precedence.
 
 ---
 

@@ -21,6 +21,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable
 
+from ..diagnostics import is_failure_kind
+
 
 class QueraHTTPClient:
     """Small JSON/HTML transport that retains cookies only in process memory."""
@@ -203,11 +205,14 @@ class QueraAdapter:
             if not self._logged_in(client):
                 return {"status": "unavailable"}
         observation = self._observe_authenticated(client, request)
-        return {
+        result = {
             "status": "ok" if observation.get("status") == "ok" else "unavailable",
             "observation": observation,
             "private_state": {"cookies": client.export_cookies()},
         }
+        if is_failure_kind(observation.get("failure_kind")):
+            result["failure_kind"] = observation["failure_kind"]
+        return result
 
     def resume(self, private_state: dict, response: dict) -> dict:
         if not isinstance(private_state, dict) or not isinstance(response, dict):
@@ -232,7 +237,7 @@ class QueraAdapter:
         # A reCAPTCHA token belongs to the interactive browser challenge. The
         # adapter never OCRs it, fabricates it, or treats a click as authentication.
         if response.get("kind") == "interactive_completed":
-            return {"status": "unavailable"}
+            return {"status": "challenge_unavailable"}
         return {"status": "invalid_input"}
 
     def _client(self, session: dict):
@@ -355,13 +360,17 @@ class QueraAdapter:
             }
         if request["scope"] == "assignments":
             class_id = request["class_ref"]["class_id"]
-            path = "/course/{}/".format(urllib.parse.quote(class_id, safe=""))
+            # Quera's canonical course page has no trailing slash. The slash
+            # variant currently responds with a redirect that urllib surfaces
+            # as HTTP 308 instead of following, which made every assignment
+            # observation look like a transport failure.
+            path = "/course/{}".format(urllib.parse.quote(class_id, safe=""))
             try:
                 url, page = client.get(path)
             except (OSError, TimeoutError, ConnectionError, ValueError):
-                return _failed("assignments", observed_at)
+                return _failed("assignments", observed_at, "transport_error")
             if _is_login_url(url):
-                return _failed("assignments", observed_at)
+                return _failed("assignments", observed_at, "authentication_required")
             nodes = _course_assignment_nodes(
                 page,
                 class_id=class_id,
@@ -369,7 +378,7 @@ class QueraAdapter:
                 origin=self.connection.get("origin", "https://quera.org"),
             )
             if nodes is None:
-                return _failed("assignments", observed_at)
+                return _failed("assignments", observed_at, "unexpected_response")
             return _complete("assignments", observed_at, nodes)
         if request["scope"] == "assignment_detail":
             task_ref = request["task_ref"]
@@ -774,14 +783,17 @@ def _complete(scope: str, observed_at: str, nodes: list[dict]) -> dict:
     }
 
 
-def _failed(scope: str, observed_at: str) -> dict:
-    return {
+def _failed(scope: str, observed_at: str, failure_kind: str | None = None) -> dict:
+    result = {
         "status": "unavailable",
         "scope": scope,
         "coverage": "incomplete",
         "observed_at": observed_at,
         "nodes": [],
     }
+    if is_failure_kind(failure_kind):
+        result["failure_kind"] = failure_kind
+    return result
 
 
 def _valid_request(request: dict, connection: dict) -> bool:

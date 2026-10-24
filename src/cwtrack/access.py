@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
+from .diagnostics import is_failure_kind
+
 
 class WindowsDPAPIVault:
     """Protect small private records with the current Windows user's DPAPI key."""
@@ -85,7 +87,9 @@ class AccessManager:
         self._vault = vault
         self._clock = clock
 
-    def configure(self, platform: str, origin: str, credentials: dict) -> dict:
+    def configure(
+        self, platform: str, origin: str, credentials: dict, *, label: str | None = None
+    ) -> dict:
         """Store supplied credentials without writing or returning their values."""
         parsed = urlparse(origin) if isinstance(origin, str) else None
         if (
@@ -101,6 +105,10 @@ class AccessManager:
             return {"status": "invalid_input"}
         if platform not in self._adapters:
             return {"status": "adapter_unavailable"}
+        if label is not None and (
+            not isinstance(label, str) or not label.strip() or len(label.strip()) > 80
+        ):
+            return {"status": "invalid_input"}
         allowed_hosts = {"cw": "cw.sharif.ir", "quera": "quera.org"}
         if platform in allowed_hosts and (
             parsed.scheme != "https"
@@ -110,6 +118,12 @@ class AccessManager:
             return {"status": "invalid_input"}
 
         manifest = self._read()
+        if label is not None and any(
+            connection.get("state") == "configured"
+            and connection.get("label", "").casefold() == label.strip().casefold()
+            for connection in manifest["connections"].values()
+        ):
+            return {"status": "label_conflict"}
         connection_id = uuid.uuid4().hex
         connection = {
             "id": connection_id,
@@ -119,6 +133,8 @@ class AccessManager:
             "created_at": self._clock(),
             "state": "configured",
         }
+        if label is not None:
+            connection["label"] = label.strip()
         try:
             self._vault.put(_credential_key(connection_id, 1), credentials)
         except (OSError, ValueError):
@@ -210,10 +226,11 @@ class AccessManager:
     def connections(self) -> list[dict]:
         """Return configured account metadata without touching protected values."""
         manifest = self._read()
-        return [
+        configured = [
             {
                 "id": connection["id"],
                 "platform": connection["platform"],
+                "label": connection.get("label"),
                 "origin": connection["origin"],
                 "credential_generation": connection["credential_generation"],
                 "created_at": connection["created_at"],
@@ -222,6 +239,88 @@ class AccessManager:
             for connection in manifest["connections"].values()
             if connection.get("state") == "configured"
         ]
+        counts: dict[str, int] = {}
+        for connection in configured:
+            counts[connection["platform"]] = counts.get(connection["platform"], 0) + 1
+            if not connection.get("label"):
+                connection["label"] = "{} · اتصال {}".format(
+                    connection["platform"].upper(), counts[connection["platform"]]
+                )
+        return configured
+
+    def pending_challenges(self) -> list[dict]:
+        """Return resumable challenge metadata for the local CLI/API caller."""
+        manifest = self._read()
+        by_id = {item["id"]: item for item in self.connections()}
+        results = []
+        for continuation in manifest["continuations"].values():
+            connection = by_id.get(continuation.get("connection_id"))
+            if continuation.get("status") != "pending" or connection is None:
+                continue
+            results.append({
+                "continuation_id": continuation["id"],
+                "platform": connection["platform"],
+                "label": connection["label"],
+                "kind": continuation.get("kind"),
+                "display": continuation.get("display"),
+                "expires_at": continuation.get("expires_at"),
+                "scope": (continuation.get("request") or {}).get("scope"),
+                "created_at": continuation.get("created_at", ""),
+            })
+        return results
+
+    def update_label(self, connection_id: str, label: str) -> dict:
+        """Rename a local connection without changing credentials or identity."""
+        if not isinstance(label, str) or not label.strip() or len(label.strip()) > 80:
+            return {"status": "invalid_input"}
+        manifest = self._read()
+        connection = manifest["connections"].get(connection_id)
+        if connection is None or connection.get("state") != "configured":
+            return {"status": "not_found"}
+        if any(
+            other_id != connection_id
+            and other.get("state") == "configured"
+            and other.get("label", "").casefold() == label.strip().casefold()
+            for other_id, other in manifest["connections"].items()
+        ):
+            return {"status": "label_conflict"}
+        connection["label"] = label.strip()
+        try:
+            self._write(manifest)
+        except OSError:
+            return {"status": "unavailable"}
+        return {"status": "ok", "label": connection["label"]}
+
+    def update_label_by_name(self, current_label: str, label: str) -> dict:
+        matches = [
+            connection for connection in self.connections()
+            if connection.get("label", "").casefold() == current_label.casefold()
+        ]
+        if len(matches) != 1:
+            return {"status": "not_found" if not matches else "ambiguous"}
+        return self.update_label(matches[0]["id"], label)
+
+    def forget_by_name(self, label: str) -> dict:
+        matches = [
+            connection for connection in self.connections()
+            if connection.get("label", "").casefold() == label.casefold()
+        ]
+        if len(matches) != 1:
+            return {"status": "not_found" if not matches else "ambiguous"}
+        return self.forget(matches[0]["id"])
+
+    def update_credentials_by_name(self, label: str, credentials: dict) -> dict:
+        matches = [
+            connection for connection in self.connections()
+            if connection.get("label", "").casefold() == label.casefold()
+        ]
+        if len(matches) != 1:
+            return {"status": "not_found" if not matches else "ambiguous"}
+        connection = matches[0]
+        return self.update_credentials(
+            connection["id"], credentials,
+            expected_generation=connection["credential_generation"],
+        )
 
     def observe(self, connection_id: str, request: dict) -> dict:
         """Begin one adapter operation, returning a resumable public challenge."""
@@ -390,8 +489,13 @@ class AccessManager:
                      "private_state": private_state},
                     continuation=continuation,
                 )
-        if status in {"challenge_expired", "account_mismatch", "invalid_input"}:
+        if status in {
+            "challenge_expired", "challenge_unavailable", "account_mismatch", "invalid_input"
+        }:
             return {"status": status}
+        failure_kind = result.get("failure_kind")
+        if is_failure_kind(failure_kind):
+            return {"status": "unavailable", "failure_kind": failure_kind}
         return {"status": "unavailable"}
 
     def _read(self) -> dict:

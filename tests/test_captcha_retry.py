@@ -50,11 +50,9 @@ class Moodle:
         if path == "/my/courses.php":
             return '<a href="/course/view.php?id=101">Course</a>'
         if path == "/course/view.php":
-            return "<html><h1>Course</h1></html>"
+            return (Path(__file__).parent / "fixtures/course_90000_assign.html").read_text(encoding="utf-8")
         if path == "/my/":
             return "<html></html>"
-        if path == "/mod/assign/index.php":
-            return (Path(__file__).parent / "fixtures/course_90000_assign.html").read_text(encoding="utf-8")
         raise AssertionError(path)
 
     def get_bytes(self, path, params=None):

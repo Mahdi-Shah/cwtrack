@@ -23,6 +23,13 @@ HEADER_MAP = (
 ROW_RE = re.compile(r"<tr\b[^>]*>(.*?)</tr>", re.S | re.I)
 CELL_RE = re.compile(r"<t[dh]\b[^>]*>(.*?)</t[dh]>", re.S | re.I)
 TAG_RE = re.compile(r"<[^>]+>")
+ASSIGN_ACTIVITY_RE = re.compile(
+    r"<li\b(?=[^>]*\bmodtype_assign\b)[^>]*>(.*?)</li\s*>", re.S | re.I
+)
+ASSIGN_LINK_RE = re.compile(
+    r"<a\b[^>]*href=[\"'][^\"']*mod/assign/view\.php\?id=(\d+)[^\"']*[\"'][^>]*>(.*?)</a>",
+    re.S | re.I,
+)
 
 def cell_text(fragment: str) -> str:
     text = TAG_RE.sub(" ", fragment)
@@ -75,6 +82,9 @@ def parse_dump(dump: Path, now: datetime) -> list[dict]:
         )
 
     for page_path in pages:
+        detail_match = re.match(r"assignment_(\d+)_(\d+)$", page_path.stem)
+        if detail_match:
+            continue
         # Two naming conventions exist: fetch_all writes course_<id>.html, and the
         # broader probe writes c<id>_<label>.html. Both must resolve to the id,
         # or every course collapses into a single None bucket.
@@ -141,4 +151,77 @@ def parse_dump(dump: Path, now: datetime) -> list[dict]:
                     "url": "{}/mod/assign/view.php?id={}".format(DEFAULT_BASE, cm),
                 }
             )
+
+        # Current CW course pages expose assignments as Moodle activity list
+        # items rather than the legacy assignment-index table.
+        for activity_html in ASSIGN_ACTIVITY_RE.findall(page):
+            link = ASSIGN_LINK_RE.search(activity_html)
+            if not link:
+                continue
+            cm = int(link.group(1))
+            if cm in seen_cmid:
+                continue
+            seen_cmid.add(cm)
+
+            name = cell_text(link.group(2)) or "تکلیف بدون عنوان"
+            activity_text = cell_text(activity_html)
+            deadline = re.search(
+                r"(?:مهلت(?:\s+تحویل)?|due(?:\s+date)?|deadline)\s*[:：]\s*(.+)$",
+                activity_text,
+                re.I,
+            )
+            due_text, due_epoch = parse_due(
+                deadline.group(1).strip() if deadline else "", now
+            )
+            rows.append({
+                "course_id": cid,
+                "course": title or (str(cid) if cid else "?"),
+                "name": name,
+                "cmid": cm,
+                "due_text": due_text,
+                "due": due_epoch,
+                # The activity list shows open/deadline metadata, not a
+                # student's submission or grade. Those stay explicitly unknown.
+                "status_text": "unknown",
+                "grade": "",
+                "bucket": classify("unknown", "", due_epoch, now_epoch),
+                "url": "{}/mod/assign/view.php?id={}".format(DEFAULT_BASE, cm),
+            })
+
+    # Legacy fetch stores an additional detail page for each assignment so its
+    # report can retain submission and grading data from CW's activity view.
+    for page_path in pages:
+        detail_match = re.match(r"assignment_(\d+)_(\d+)$", page_path.stem)
+        if not detail_match:
+            continue
+        course_id, assignment_id = map(int, detail_match.groups())
+        detail = parse_assignment_detail(
+            page_path.read_text(encoding="utf-8", errors="replace"), now
+        )
+        for row in rows:
+            if row["course_id"] == course_id and row["cmid"] == assignment_id:
+                row.update(detail)
     return rows
+
+
+def parse_assignment_detail(page: str, now: datetime) -> dict:
+    """Read only status, grade and deadline fields from an assignment detail page."""
+    result: dict[str, str | int | None] = {}
+    for row_html in ROW_RE.findall(page):
+        cells = [cell_text(cell) for cell in CELL_RE.findall(row_html)]
+        if len(cells) < 2:
+            continue
+        label = cells[0].casefold()
+        value = cells[1]
+        if any(term in label for term in ("grading status", "ارزیابی", "وضعیت نمره")):
+            continue
+        if any(term in label for term in ("submission status", "وضعیت تحویل", "وضعیت ارسال")):
+            result["status_text"] = value
+        elif any(term in label for term in ("grade", "نمره")):
+            result["grade"] = value
+        elif any(term in label for term in ("due date", "deadline", "مهلت")):
+            due_text, due_epoch = parse_due(value, now)
+            if due_text:
+                result["due_text"] = due_text
+                result["due"] = due_epoch
+    return result

@@ -53,7 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
         "command",
         choices=[
             "fetch", "report", "open", "raw", "store", "ui", "gaps",
-            "material", "brief", "connect", "study",
+            "material", "brief", "connect", "study", "account", "resource",
+            "relation", "work",
         ],
     )
     ap.add_argument("--base", default=DEFAULT_BASE)
@@ -224,14 +225,29 @@ def _study_management(data: str) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     _force_utf8_streams()
-    args = build_parser().parse_args(argv)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    domain_commands = {"account", "resource", "relation", "work", "study"}
+    if raw_argv and raw_argv[0] in domain_commands and any(
+        flag in {"-h", "--help"} for flag in raw_argv[1:]
+    ):
+        from .cli_domain import run as run_domain
+        return run_domain(raw_argv[0], raw_argv[1:])
+    parser = build_parser()
+    args, extra = parser.parse_known_args(raw_argv)
+    if extra and args.command not in domain_commands:
+        parser.error("آرگومان ناشناخته: {}".format(" ".join(extra)))
     base_dir = Path(args.home)
     dump = base_dir / "dump"
     client = Client(args.base)
 
+    if args.command in {"account", "resource", "relation", "work"}:
+        from .cli_domain import run as run_domain
+        return run_domain(args.command, extra, default_data=args.data, default_home=args.home, default_json=args.json)
+
     if args.command == "connect":
         if not sys.stdin.isatty():
             raise CwError("برای گرفتن رمز به‌صورت مخفی، cwtrack را در ترمینال تعاملی اجرا کنید.")
+        label = input("نام محلی اتصال CW: ").strip()
         username = ask("نام کاربری CW: ")
         try:
             with warnings.catch_warnings():
@@ -242,7 +258,8 @@ def main(argv: list[str] | None = None) -> int:
         if not password:
             raise CwError("رمز خالی است؛ اطلاعات ورود ذخیره نشد.")
         result = api.access_configure(
-            "cw", {"username": username, "password": password}, home=base_dir
+            "cw", {"username": username, "password": password}, home=base_dir,
+            label=label or None,
         )
         if result.get("status") != "ok":
             raise CwError("اتصال CW ذخیره نشد: {}".format(result.get("status", "unavailable")))
@@ -250,7 +267,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "study":
-        return _study_management(args.data)
+        from .cli_domain import run as run_domain
+        return run_domain("study", extra, default_data=args.data, default_home=args.home, default_json=args.json)
 
     if args.command == "raw":
         if not dump.is_dir():

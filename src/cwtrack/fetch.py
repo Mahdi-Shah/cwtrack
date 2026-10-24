@@ -50,11 +50,23 @@ def fetch_all(client: Client, base_dir: Path) -> int:
     ok = 0
     for cid in ids:
         try:
-            page = client.get("/mod/assign/index.php", {"id": cid})
+            page = client.get("/course/view.php", {"id": cid})
         except CwError as exc:
             print("  ! درس {} نخوانده شد: {}".format(cid, exc))
             continue
         (dump / "course_{}.html".format(cid)).write_text(page, encoding="utf-8")
+        assignment_ids = dict.fromkeys(ASSIGN_RE.findall(page))
+        detail_ids = assignment_ids if re.search(r"\bmodtype_assign\b", page, re.I) else ()
+        for assignment_id in detail_ids:
+            try:
+                detail = client.get(
+                    "/mod/assign/view.php", {"id": int(assignment_id)}
+                )
+            except CwError:
+                continue
+            (dump / "assignment_{}_{}.html".format(cid, assignment_id)).write_text(
+                detail, encoding="utf-8"
+            )
         ok += 1
         sys.stdout.write("\r  خوانده شد: {}/{}".format(ok, len(ids)))
         sys.stdout.flush()

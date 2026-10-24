@@ -1,6 +1,6 @@
 ---
 name: sharif-cw
-description: 'Tracks the user''s CW coursework and Quera assignments, checks connected course materials across both platforms, and manages durable solution revisions and verification evidence. Use when the user asks what is due, what is late, to start, continue, revise or solve coursework, or to see progress — "تکالیفم را بررسی کن", "تکالیف کوئرا", "چیزی از قلم افتاده؟", "کدام تکلیف تحویل نشده", "مهلت‌ها کی است", "تکلیفمو حل کن", "ادامهٔ تکلیفم", "منبع این درس را اضافه کن". The user speaks; you call the API. Credentials are supplied by the user and saved in Windows-protected storage. CW captcha OCR may need the user to read an image; the user supplies OTPs. Quera listing/detail and CW course-resource retrieval have offline fixture coverage; live account acceptance and interactive CAPTCHA continuation remain incomplete.'
+description: 'Tracks the user''s CW coursework and Quera assignments, checks connected course materials across both platforms, and manages durable solution revisions and verification evidence. Use when the user asks what is due, what is late, to start, continue, revise or solve coursework, or to see progress — "تکالیفم را بررسی کن", "تکالیف کوئرا", "چیزی از قلم افتاده؟", "کدام تکلیف تحویل نشده", "مهلت‌ها کی است", "تکلیفمو حل کن", "ادامهٔ تکلیفم", "منبع این درس را اضافه کن". The user speaks; you call the API. Credentials are supplied by the user and saved in Windows-protected storage. CW captcha OCR may need the user to read an image; the user supplies OTPs. Quera listing/detail and CW course-resource retrieval have offline fixture coverage; live account acceptance remains unverified. Quera reCAPTCHA is deliberately reported as `challenge_unavailable` because a browser token cannot authenticate the local API session.'
 ---
 
 # Sharif courseware (cw.sharif.ir)
@@ -135,6 +135,23 @@ text the user supplied, pass a `manual` source with its course, title, prompt an
 attachment paths. `collect_assignment` extracts text from `.txt`, `.md` and `.csv`;
 read other formats with the matching document skill and retain the original file.
 
+When equal or near-equal titles appear in different platforms, compare each exact
+`TaskRef` with `api.collect_assignment({"task_ref": ref})` before preparing work. Put
+the course, prompt, requested deliverables, and readable attachments side by side;
+state which fields match, which differ, and which could not be read. A title match
+alone is not evidence that the assignments are identical. Show each platform's
+deadline and submission state separately because they can differ even for the same
+assignment. If either prompt is unavailable or evidence conflicts, explain the gap
+and ask the student. Then ask whether these are the same assignment. Until the student
+confirms, keep the TaskRefs separate and do not create a relation or Work item.
+
+After an explicit confirmation, read `catalog_revision` from `api.study_view()` and
+call `api.assignment_relate(task_refs, reason, relation_type="same_assignment",
+expected_revision=revision)`. The dashboard will show one collapsible group with a
+separate platform card for each publication. Keep each TaskRef, deadline, submission
+state, and Work record independent. If the student says they are only related, use
+`relation_type="related"`; if they are different, record no relation.
+
 Create or resume the durable record with:
 
 ```python
@@ -203,7 +220,10 @@ Do not invent IDs, deadlines, completeness or a successful submission state. If 
 user has no stable task reference, use the manual-input workflow and mark its source
 accordingly. Quera's login needs the user's supplied credentials and may ask for an
 OTP. The current reCAPTCHA response cannot be transferred from a browser challenge to
-the local HTTP session, so report it as an unresolved interactive challenge.
+the local HTTP session. Report it as `challenge_unavailable`, direct the student to
+continue manually at `https://quera.org/accounts/login`, and never describe that
+browser action as an authenticated API refresh. A new API attempt starts only when
+the student explicitly requests a fresh refresh; stop again if the challenge repeats.
 
 When the student explicitly says two exact tasks are related, record that relationship
 with `api.assignment_relate(task_refs, reason, expected_revision=view["catalog_revision"])`.
@@ -343,9 +363,12 @@ matter of taste:
   caller should make.
 
 The CLI still exists, and it is still the right tool for a person at a terminal —
-`cwtrack fetch`, `cwtrack ui`, `cwtrack gaps`, `cwtrack report -o out.md`. It calls
-the same API, so it cannot disagree with you. Offer it when the user wants to run
-something themselves or when the user needs to debug a parse failure.
+`cwtrack fetch`, `cwtrack ui`, `cwtrack study report`, `cwtrack gaps`,
+`cwtrack report -o out.md`. It calls the same API, so it cannot disagree with you.
+Offer it when the user wants to run something themselves or when the user needs to
+debug a parse failure. The old `report`, `open`, and `gaps` commands remain CW-only;
+`study report` is the shared CW/Quera view. See `docs/cli-guide.fa.md` for account,
+resource, relation, and Work commands and the file-input contract.
 
 ## What the site actually is
 

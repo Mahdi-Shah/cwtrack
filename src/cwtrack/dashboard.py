@@ -21,9 +21,23 @@ from __future__ import annotations
 import base64
 import hashlib
 import html
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
+
+from .dashboard_projection import (
+    WORK_STAGE_FA,
+    _action_items,
+    _assignment_freshness_index,
+    _class_freshness_label,
+    _class_freshness_text,
+    _class_group_key,
+    _dashboard_tasks,
+    _due_epoch,
+    _legacy_platform_assignments,
+    _submission_presentation,
+    _task_key,
+)
 
 # ---- fonts ---------------------------------------------------------------
 # Fonts ship inside the package so a pip install carries them. An earlier
@@ -1038,37 +1052,7 @@ def order(items):
     return items
 
 
-WORK_STAGE_FA = {
-    "ready_to_start": "آمادهٔ شروع",
-    "in_progress": "در حال انجام",
-    "under_verification": "در حال بررسی",
-    "needs_completion": "نیازمند تکمیل",
-    "ready_for_student_review": "آمادهٔ بررسی دانشجو",
-}
 
-SUBMISSION_LABELS = {
-    "not_submitted": ("ارسال نشده", "todo"),
-    "not submitted": ("ارسال نشده", "todo"),
-    "no submission": ("ارسال نشده", "todo"),
-    "open": ("باز؛ منتظر ارسال", "todo"),
-    "draft": ("پیش‌نویس", "todo"),
-    "overdue": ("مهلت گذشته؛ ارسال نشده", "overdue"),
-    "closed": ("مهلت بسته شده؛ وضعیت تحویل را بررسی کن", "overdue"),
-    "submitted": ("ارسال شده", "done"),
-    "submitted for grading": ("ارسال شده؛ در انتظار ارزیابی", "done"),
-    "sent for grading": ("ارسال شده؛ در انتظار ارزیابی", "done"),
-    "sent for marking": ("ارسال شده؛ در انتظار ارزیابی", "done"),
-    "graded": ("ارزیابی شده", "done"),
-    "accepted": ("پذیرفته شده", "done"),
-    "rejected": ("نیازمند اصلاح", "todo"),
-    "ارسال نشده": ("ارسال نشده", "todo"),
-    "ارسال‌نشده": ("ارسال نشده", "todo"),
-    "ارسال شده": ("ارسال شده", "done"),
-    "ارسال‌شده": ("ارسال شده", "done"),
-    "تحویل شده": ("ارسال شده", "done"),
-    "تحویل‌شده": ("ارسال شده", "done"),
-    "مهلت گذشته": ("مهلت گذشته؛ ارسال نشده", "overdue"),
-}
 
 EVALUATION_LABELS = {
     "graded": "ارزیابی شده",
@@ -1078,191 +1062,16 @@ EVALUATION_LABELS = {
 }
 
 
-def _task_key(ref: dict) -> tuple:
-    return tuple(
-        ref.get(key)
-        for key in ("connection_id", "class_id", "assignment_id", "question_id")
-    )
 
 
-def _due_epoch(value) -> int | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        return int(datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp())
-    except (ValueError, OverflowError, OSError):
-        return None
 
 
-def _legacy_platform_assignments(assignments: list, study: dict, refreshed: str) -> list[dict]:
-    """Adapt legacy CW tasks, linking only a unique exact CW class identifier."""
-    classes_by_id: dict[str, list[dict]] = {}
-    for item in study.get("classes", []):
-        if (
-            item.get("platform") == "cw"
-            and item.get("observed_in_latest_class_list", True)
-        ):
-            classes_by_id.setdefault(str(item.get("ref", {}).get("class_id")), []).append(item)
-    known = {
-        (
-            str(item.get("class_ref", {}).get("class_id")),
-            str(item.get("ref", {}).get("assignment_id")),
-        )
-        for item in study.get("platform_assignments", [])
-        if item.get("platform") == "cw"
-    }
-    rows = []
-    for item in assignments:
-        class_id, assignment_id = str(item.course_id), str(item.cmid)
-        matches = classes_by_id.get(class_id, [])
-        matched_class = matches[0] if len(matches) == 1 else None
-        if matched_class and (class_id, assignment_id) in known:
-            continue
-        connection_id = (
-            matched_class.get("ref", {}).get("connection_id")
-            if matched_class else "cw-legacy"
-        )
-        ref = {
-            "connection_id": connection_id,
-            "class_id": class_id,
-            "assignment_id": assignment_id,
-        }
-        deadlines = []
-        if item.due:
-            try:
-                deadline = datetime.fromtimestamp(item.due, timezone.utc).isoformat()
-            except (OverflowError, OSError, ValueError):
-                deadline = ""
-            if deadline:
-                deadlines.append({"kind": "regular", "at": deadline, "raw": item.due_text})
-        rows.append({
-            "kind": "assignment",
-            "ref": ref,
-            "class_ref": {key: ref[key] for key in ("connection_id", "class_id")},
-            "title": item.name,
-            "course_title": item.course,
-            "url": item.url,
-            "platform": "cw",
-            "submission": {
-                "state": item.status_text or "unknown",
-                "raw": item.status_text or "",
-            },
-            "evaluation": {
-                "state": "graded" if item.grade and item.grade != "-" else "unknown",
-                "grade": item.grade or None,
-            },
-            "deadlines": deadlines,
-            "last_success_at": refreshed or "",
-            "legacy_course_id": item.course_id,
-            "legacy_assignment_id": item.cmid,
-            "legacy_link_status": (
-                "linked" if matched_class
-                else "ambiguous" if len(matches) > 1
-                else "unmatched"
-            ),
-        })
-    return rows
 
 
-def _submission_presentation(platform: str, submission: dict) -> tuple[str, str, str, str]:
-    state = str(submission.get("state") or "unknown").strip()
-    raw = str(submission.get("raw") or "").strip()
-    canonical = state.casefold()
-    if canonical in {"", "unknown", "none"} and raw:
-        canonical = raw.casefold()
-    known = SUBMISSION_LABELS.get(canonical)
-    if known:
-        filter_state = (
-            "submitted" if known[1] == "done"
-            else "check" if canonical == "closed"
-            else "todo"
-        )
-        return known[0], known[1], filter_state, ""
-    if canonical in {"", "unknown", "none", "-", "—"}:
-        if platform == "quera":
-            return (
-                "وضعیت ارسال از کوئرا دریافت نمی‌شود",
-                "unknown",
-                "check",
-                "برای اطمینان در کوئرا بررسی شود",
-            )
-        return (
-            "وضعیت ارسال از سامانه دریافت نشده",
-            "unknown",
-            "check",
-            "وضعیت تحویل را در خود سامانه بررسی کن",
-        )
-    # CW may expose a localized status added by the site. Keep that source text
-    # visible rather than silently converting a new value into a known state.
-    return raw or state, "unknown", "check", "این عبارت مستقیماً از سامانه آمده است"
 
 
-def _dashboard_tasks(study: dict, now_epoch: int) -> list[dict]:
-    """Build the one deduplicated assignment view used by dashboard summaries."""
-    rows = []
-    seen = set()
-    classes = {
-        (item.get("ref", {}).get("connection_id"), item.get("ref", {}).get("class_id")): item
-        for item in study.get("classes", [])
-    }
-    for item in study.get("platform_assignments", []):
-        ref = item.get("ref") or {}
-        key = _task_key(ref)
-        has_stable_key = (
-            ref.get("connection_id") is not None
-            and ref.get("class_id") is not None
-            and (ref.get("assignment_id") is not None or ref.get("question_id") is not None)
-        )
-        if has_stable_key:
-            if key in seen:
-                continue
-            seen.add(key)
-        deadlines = item.get("deadlines", []) or []
-        regular = next((d for d in deadlines if isinstance(d, dict) and d.get("kind") in {"regular", "normal"}), None)
-        late = next((d for d in deadlines if isinstance(d, dict) and d.get("kind") == "late"), None)
-        # Older records may only have one untyped deadline.
-        if regular is None:
-            regular = next((d for d in deadlines if isinstance(d, dict) and not d.get("kind")), None)
-        regular_due = _due_epoch(regular.get("at")) if regular else None
-        late_due = _due_epoch(late.get("at")) if late else None
-        state = _submission_presentation(
-            item.get("platform", ""), item.get("submission", {}) or {}
-        )[2]
-        due = late_due if late_due and (regular_due is None or regular_due < now_epoch < late_due) else regular_due
-        class_ref = item.get("class_ref", {})
-        class_item = classes.get((
-            class_ref.get("connection_id"), class_ref.get("class_id")
-        ), {})
-        offering = class_item.get("offering") or {}
-        if offering.get("title"):
-            course = offering["title"]
-        elif class_item:
-            course = "کلاس بی‌نگاشت · {}".format(class_item.get("title") or "نام نامشخص")
-        elif item.get("legacy_link_status") in {"unmatched", "ambiguous"}:
-            course = "دادهٔ قدیمی CW · {}".format(item.get("course_title") or "درس بی‌نام")
-        else:
-            course = item.get("course_title") or "درس نامشخص"
-        rows.append({
-            "name": str(item.get("title") or "تکلیف بدون عنوان"),
-            "course": str(course),
-            "url": item.get("url") or "#",
-            "state": state,
-            "due": due,
-            "regular_due": regular_due,
-            "late_due": late_due,
-        })
-    return rows
 
 
-def _action_items(tasks: list[dict], now_epoch: int, horizon_days: int = 14) -> list[dict]:
-    horizon = now_epoch + horizon_days * 86400
-    return [
-        item for item in tasks
-        if item["state"] in {"todo", "check"} and (
-            item["due"] is None or item["due"] <= horizon
-            or item["regular_due"] is not None and item["regular_due"] < now_epoch
-        )
-    ]
 
 
 def work_panel(items: list[dict], resources: dict | None = None) -> str:
@@ -1334,67 +1143,12 @@ def work_panel(items: list[dict], resources: dict | None = None) -> str:
     ).format(len(items), "".join(cards))
 
 
-def _class_group_key(item: dict) -> tuple:
-    ref = item.get("ref", {})
-    offering_id = (item.get("offering") or {}).get("id")
-    if offering_id:
-        return ("offering", offering_id)
-    return ("class", ref.get("connection_id"), ref.get("class_id"))
 
 
-def _assignment_freshness_index(study: dict) -> dict[tuple, dict]:
-    return {
-        (
-            item.get("class_ref", {}).get("connection_id"),
-            item.get("class_ref", {}).get("class_id"),
-        ): item
-        for item in study.get("assignment_observations", [])
-    }
 
 
-def _class_freshness_text(item: dict, freshness_by_class: dict[tuple, dict]) -> str:
-    ref = item.get("ref", {})
-    observation = freshness_by_class.get((ref.get("connection_id"), ref.get("class_id")))
-    if not observation:
-        return "تکلیف‌های این کلاس هنوز دریافت نشده‌اند."
-    status = observation.get("last_attempt_status") or "نامشخص"
-    coverage = observation.get("coverage") or "نامشخص"
-    if status == "ok" and coverage == "complete":
-        state = "آخرین تلاش کامل بود"
-    elif status == "unavailable":
-        state = "سامانه در آخرین تلاش در دسترس نبود"
-    elif status == "challenge_required":
-        state = "برای دریافت تازه ورود یا تأیید لازم است"
-    else:
-        state = "آخرین تلاش ناقص یا ناموفق بود"
-    last_attempt = observation.get("last_attempt_at") or "ثبت نشده"
-    last_success = observation.get("last_success_at")
-    success_text = (
-        "آخرین دریافت کامل: {}".format(last_success)
-        if last_success else "هنوز دریافت کامل موفقی ثبت نشده"
-    )
-    if last_success and observation.get("last_attempt_at") and last_success < observation["last_attempt_at"]:
-        state += "؛ دادهٔ قدیمیِ آخرین دریافت موفق نمایش داده می‌شود"
-    return "{} · آخرین تلاش: {} · {}".format(state, last_attempt, success_text)
 
 
-def _class_freshness_label(item: dict, freshness_by_class: dict[tuple, dict]) -> str:
-    ref = item.get("ref", {})
-    observation = freshness_by_class.get((ref.get("connection_id"), ref.get("class_id")))
-    if not observation:
-        return "دریافت تکلیف هنوز انجام نشده"
-    status = observation.get("last_attempt_status")
-    coverage = observation.get("coverage")
-    if status == "ok" and coverage == "complete":
-        label = "تلاش تکلیف کامل"
-    elif status == "unavailable":
-        label = "سامانه در تلاش تکلیف در دسترس نبود"
-    elif status == "challenge_required":
-        label = "ورود یا تأیید برای دریافت تکلیف لازم است"
-    else:
-        label = "تلاش تکلیف ناقص یا ناموفق"
-    last_success = observation.get("last_success_at")
-    return "{} · موفق: {}".format(label, last_success or "ثبت نشده")
 
 
 def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
@@ -1423,6 +1177,7 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
     labels = {"cw": "CW شریف", "quera": "کوئرا"}
     freshness_by_class = _assignment_freshness_index(study)
     groups = {}
+    same_assignment_groups = {}
     for class_item in study.get("classes", []):
         key = _class_group_key(class_item)
         offering = class_item.get("offering") or {}
@@ -1494,11 +1249,13 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
         due = deadline.get("at") if isinstance(deadline, dict) else ""
         due_epoch = _due_epoch(due)
         freshness = assignment.get("last_success_at") or "نامشخص"
+        task_relations = relations_by_task.get(_task_key(assignment.get("ref", {})), [])
         relation_notes = [
-            "تکلیف مرتبط؛ روند انجام مستقل: {}".format(
+            "تکلیف یکسان با تأیید دانشجو؛ وضعیت و انجام مستقل: {}".format(
                 relation.get("reason", "")
-            )
-            for relation in relations_by_task.get(_task_key(assignment.get("ref", {})), [])
+            ) if relation.get("relation_type", "related") == "same_assignment"
+            else "تکلیف مرتبط؛ روند انجام مستقل: {}".format(relation.get("reason", ""))
+            for relation in task_relations
         ]
         local_work = work_by_task.get(_task_key(assignment.get("ref", {})))
         if local_work is None and assignment.get("legacy_course_id") is not None:
@@ -1542,7 +1299,7 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
                 "<p class='assignment-legacy-note'>این ردیف از دادهٔ قدیمی CW آمده؛ "
                 "زمان زیر زمان همان مشاهدهٔ قدیمی است.</p>"
             )
-        group["cards"].append(
+        assignment_card = (
             "<details class='assignment-card' open data-title='{}' data-course='{}' "
             "data-platform='{}' data-submission='{}' data-due-epoch='{}'>"
             "<summary class='assignment-head'><div class='assignment-title-group'>"
@@ -1567,6 +1324,21 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
                 relation_html, esc(freshness), esc(freshness), esc(url),
             )
         )
+        same_assignment = next((
+            relation for relation in task_relations
+            if relation.get("relation_type", "related") == "same_assignment"
+        ), None)
+        if same_assignment:
+            group["same_assignment_count"] = group.get("same_assignment_count", 0) + 1
+            relation_key = same_assignment.get("id") or str(id(same_assignment))
+            composite = same_assignment_groups.setdefault(relation_key, {
+                "reason": same_assignment.get("reason", "تأییدشده توسط دانشجو"),
+                "cards": [],
+                "expected_count": len(same_assignment.get("task_refs", [])),
+            })
+            composite["cards"].append(assignment_card)
+        else:
+            group["cards"].append(assignment_card)
         card_count += 1
         group["assignment_count"] += 1
 
@@ -1634,7 +1406,12 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
                 else "برای شناسهٔ دادهٔ قدیمی کلاس CW یکتایی پیدا نشد؛ داده جدا نگه داشته شد."
             )
             warning = "<p class='course-link-warning'>{}</p>".format(esc(warning_text))
-        if not group["cards"] and group["kind"] != "legacy":
+        if not group["cards"] and group.get("same_assignment_count"):
+            group["cards"].append(
+                "<p class='course-group-empty'>تکلیف این کلاس در گروهِ تأییدشدهٔ "
+                "تکلیف‌های یکسان نمایش داده می‌شود.</p>"
+            )
+        if not group["cards"] and not group["assignment_count"] and group["kind"] != "legacy":
             no_tasks = (
                 "در دریافت کامل اخیر، تکلیفی برای این کلاس ثبت نشده است."
                 if any(
@@ -1678,6 +1455,25 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
         else:
             mapped_groups.append(rendered)
 
+    same_assignment_cards = []
+    for composite in same_assignment_groups.values():
+        expected = max(composite["expected_count"], len(composite["cards"]))
+        publication_count = (
+            "{} انتشار در سامانه‌ها".format(len(composite["cards"]))
+            if len(composite["cards"]) == expected
+            else "{} از {} انتشار در دریافت فعلی دیده می‌شود".format(
+                len(composite["cards"]), expected
+            )
+        )
+        same_assignment_cards.append((
+            "<details class='course-group' open><summary><span><b>تکلیف یکسان با تأیید دانشجو</b>"
+            "<small>{} · انجام و تحویل مستقل</small></span>"
+            "<span class='collapse-hint' aria-hidden='true'></span></summary>"
+            "<div class='course-group-body'><p class='assignment-relation'>{}</p>{}</div></details>"
+        ).format(
+            esc(publication_count), esc(composite["reason"]), "".join(composite["cards"])
+        ))
+
     def course_section(title: str, items: list[str], section_id: str, *, open_by_default: bool = True) -> str:
         if not items:
             return ""
@@ -1697,6 +1493,7 @@ def platform_panel(study: dict, work_items: list[dict] | None = None) -> str:
         + course_section("کلاس‌های بی‌نگاشت", unlinked_groups, "unlinked-classes")
         + course_section("داده‌های قدیمی نیازمند تطبیق", legacy_groups, "unlinked-legacy")
         + course_section("بایگانی", archived_groups, "archived-courses", open_by_default=False)
+        + course_section("تکلیف‌های یکسانِ تأییدشده", same_assignment_cards, "same-assignments")
         or "<div class='empty'>کلاسی در فهرست دریافت‌شده وجود ندارد.</div>"
     )
     return (
@@ -2142,7 +1939,10 @@ def resource_library_page(study: dict, dashboard_name: str = "index.html") -> st
         "<div><strong>{resource_count}</strong><span>منبع فعال</span></div></article>"
         "<article class='resource-stat'><span class='resource-stat-icon' aria-hidden='true'>⌁</span>"
         "<div><strong>{target_count}</strong><span>اتصال به درس یا تکلیف</span></div></article>"
-        "<article class='resource-stat'><span class='resource-stat-icon' aria-hidden='true'>✓</span>"
+        "<article class='resource-stat'><span class='resource-stat-icon' aria-hidden='true'>"
+        "<svg viewBox='0 0 24 24' width='1em' height='1em' fill='none' stroke='currentColor' "
+        "stroke-width='2' stroke-linecap='round' stroke-linejoin='round'>"
+        "<path d='m5 12 4 4L19 6'/></svg></span>"
         "<div><strong>{capture_count}</strong><span>نسخهٔ ذخیره‌شده</span></div></article></section>"
         "<section class='resource-shelf' aria-labelledby='resource-shelf-title'>"
         "<div class='resource-shelf-head'><div><h2 id='resource-shelf-title'>منابع متصل</h2>"

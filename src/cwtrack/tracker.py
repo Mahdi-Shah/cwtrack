@@ -134,7 +134,7 @@ def store(data: Path, info: dict, rows: list[dict], materials_root: Path | None 
             "title": title,
             "term": term,
             "url": "https://cw.sharif.ir/course/view.php?id={}".format(cid),
-            "assignments_url": "https://cw.sharif.ir/mod/assign/index.php?id={}".format(cid),
+            "assignments_url": "https://cw.sharif.ir/course/view.php?id={}".format(cid),
         }
         (cdir / "course.json").write_text(
             json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"

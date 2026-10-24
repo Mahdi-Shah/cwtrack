@@ -67,6 +67,33 @@ def test_each_local_capture_keeps_the_exact_bytes_as_an_unused_version(tmp_path)
         first["sha256"], second["sha256"]
     ]
     assert all(capture["status"] == "captured" for capture in captures)
+    assert all(capture["extraction_status"] == "needs_codex_extraction" for capture in captures)
+
+
+def test_text_resources_extract_utf8_and_unknown_types_are_flagged(tmp_path):
+    text_file = tmp_path / "notes.md"
+    text_file.write_text("درس نمونه\n", encoding="utf-8")
+    unknown_file = tmp_path / "notes.xyz"
+    unknown_file.write_bytes(b"opaque")
+    library = ResourceLibrary({"data": tmp_path / "state"}, clock=lambda: "now")
+
+    text_resource = library.attach(
+        {"title": "Notes", "location": {"kind": "file", "path": str(text_file)}},
+        to={"offering_id": "offering"},
+    )
+    unknown_resource = library.attach(
+        {"title": "Unknown", "location": {"kind": "file", "path": str(unknown_file)}},
+        to={"offering_id": "offering"},
+    )
+    text_capture = library.capture(text_resource["resource_id"], extent={"section": "all"})
+    unknown_capture = library.capture(unknown_resource["resource_id"], extent={"section": "all"})
+
+    assert text_capture["status"] == "captured"
+    assert text_capture["extraction_status"] == "extracted"
+    assert Path(tmp_path / "state" / text_capture["extracted_path"]).read_text(encoding="utf-8") == "درس نمونه\n"
+    assert unknown_capture["status"] == "captured"
+    assert unknown_capture["extraction_status"] == "needs_extraction"
+    assert Path(unknown_capture["artifact_path"]).read_bytes() == b"opaque"
 
 
 def test_work_checkpoint_records_only_a_real_capture_as_used(tmp_path):

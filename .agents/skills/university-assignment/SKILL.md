@@ -17,10 +17,11 @@ A visible gap costs the student one sentence. A confident invention costs them t
 
 - `references/integrity.md` — the strict-mode rules, the specific traps, the checklist to run before every delivery
 - `references/assignment-types.md` — the playbook per assignment type: what each one must contain and how it usually goes wrong
-- `references/persian-output.md` — house style: RTL, digits, ZWNJ, punctuation, units, how to write formulas with no TeX engine
+- `references/persian-output.md` — house style: RTL, digits, ZWNJ, punctuation, units and typeset mathematics
 - `assets/brief-template.md` — the working brief you fill in after reading the assignment
 - `assets/delivery-template.md` — the delivery note, including the mandatory unverified list
-- `scripts/render.py` — Markdown/HTML → PDF via headless Chrome/Edge. Zero dependencies.
+- `references/latex-reports.md` — default PDF workflow using the local Sharif template library, XeLaTeX, and archived sources.
+- `scripts/render.py` — legacy Markdown/HTML renderer, only for an explicit assignment exception.
 
 ## Workflow
 
@@ -129,19 +130,17 @@ Reproduce it in both required formats: the `.docx` by filling the original in pl
 
 ### 5. Render
 
-Write the document as Markdown in the same folder as the brief. Then:
+**Every assignment PDF uses a LaTeX template unless the assignment explicitly requires a different format or template.** The agent chooses per assignment; templates are not bound to courses. Read `references/latex-reports.md` before producing any PDF. The initial library contains the approved Sharif exercise without cover, exercise with cover, and project report templates. Preserve their appearance while adapting their sample content to a student answer.
 
-```bash
-python scripts/render.py draft.md --title "..." --subtitle "..." --footer "نیم‌سال اول ۱۴۰۴"
-```
+Use `api.report_templates`, `api.report_prepare` and `api.report_build` for saved work. Write the actual answer as LaTeX in the returned `content_path`, keeping figures, bibliography and other dependencies inside that project. Save academic sections before building. Each build freezes its source and keeps a complete source ZIP beside the PDF. The selected template, upstream hash, recipe version, selection reason and build result are saved in the work history.
 
-- Output PDF path defaults to the source stem. Verify it exists and is non-trivial — the script exits non-zero and says why if it fails.
-- Standalone digits become Persian (`12` → `۱۲`); identifiers stay Latin (`COVID-19`, `ISO-8601`, `3.14.7`). `--digits latin` for a mostly-Latin document.
-- Vazirmatn is bundled in `assets/fonts/` and embedded into the PDF automatically — for documents you author from scratch. **When a template exists, that template's face wins** (`## 0`, `## 4a`). `--font system` opts out and uses whatever the machine has installed, which is worse for Persian but produces a much smaller intermediate HTML.
-- `.docx` is required when the course says Word. Write the Markdown anyway — it stays the editable master — then convert with the `docx` skill if installed, otherwise say plainly that the Markdown is the deliverable and offer to format it if they install one.
-- Slides are not this script's job. Use python-pptx or the `pptx` skill, and open the result to confirm it renders.
-- Real typeset math needs the LaTeX path (`xelatex` is present); raise it before switching, it needs one setup round-trip. See `references/persian-output.md`.
-- **The upload is the student's.** Nothing here submits anything anywhere, and nothing should gain that ability. When the work is done, tell them to upload it themselves, in their browser, after reading it. The deadline in the brief is theirs to check — this skill does not remind them.
+A successful build is `under_verification`, not student-ready. Inspect the PDF and source bundle, then record evidence for both `pdf` and `latex_source`, including the returned `report_basis_digest`. After changing source, template or answer, rebuild and verify the affected outputs.
+
+A failed build is checkpointed as `needs_completion` with its diagnostics and available source. Resolve dependencies or source errors and retry. Preserve unfinished work and disclose any remaining blocker. Use the legacy HTML renderer only when an explicit assignment requirement authorizes that exception; compiler failure does not authorize it.
+
+For work without a `work_id`, first create a manual work record with the received assignment so the same template and source history applies. An explicitly required Word or slide file still follows that format's own artifact workflow and supplied template.
+
+**The upload is the student's.** Tell them to read the final files and upload them in their own browser.
 
 ### 6. Audit and deliver
 
@@ -157,7 +156,7 @@ then use the returned `input_fingerprint` and `answer_fingerprint` in each check
 so evidence is tied to the exact input and answer that were examined. A requirement
 has `id`, `description`, `deliverable_roles` and `verification_method`; a check has
 `requirement_id`, the matching `method`, `result` (`pass`, `fail` or `not_run`),
-`evidence`, both content fingerprints, and `deliverables` listing each inspected
+`evidence`, both content fingerprints, `report_basis_digest` for templated PDFs, and `deliverables` listing each inspected
 file's role and SHA-256. Hash every file you intend to deliver and inspect it; an
 unlisted output keeps the work in `needs_completion`. Save the checks, then call
 `api.work_finish` with those output paths and roles plus the delivery note. The API
@@ -176,7 +175,7 @@ Read `references/persian-output.md`. The four that get violated most:
 - **No tashkeel, ever** (`## 0.d`) — no fatha, kasra, damma, tanween, shadda, sukun, superscript alef, and no hamza-above on a bare `ه`. Persian students type `مهندسی`, never `مهندسی`, so marks read as machine-generated before the content does. Strip them programmatically; do not trust your eye.
 - **A template beats this file's style** (`## 0`) — the course's font, sizes and wording are the spec.
 - **The document stands alone** (`## 0.b`) — no `[نیازمند …]`, no helper text, no reference to the writing process, on the page.
-- **ZWNJ for correctness** (`می‌شود`, `به‌طور`, `نمی‌توان`) regardless of document type, and formulas Unicode-first (`F = k·Δx`, `∂u/∂t = α∇²u`) because the PDF pipeline has **no TeX engine** and prints formula source verbatim.
+- **ZWNJ for correctness** (`می‌شود`, `به‌طور`, `نمی‌توان`) regardless of document type. Typeset formulas with LaTeX math environments in the selected template; keep Latin terms and code in the proper direction.
 
 Punctuation is the fourth axis and it is **proportional**: a problem set or form gets periods and little else (`## 0.e`), an essay gets normal Persian punctuation, a research article gets the full formal set. Do not default to tidy prose punctuation — on a simple assignment it is a signature.
 
